@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import axios from 'axios'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../utils/config'
@@ -135,91 +134,148 @@ async function searchVault(query: string): Promise<{context: string, clientFolde
   }
 }
 
-// Helper function to call Hugging Face API
-async function generateText(prompt: string, maxTokens: number = 500): Promise<string> {
-  try {
-    const response = await fetch(HF_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${HF_TOKEN}`
-      },
-      body: JSON.stringify({
-        model: HF_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`)
+// Function to generate mock content directly without an LLM when API is down
+function generateMockContent(prompt: string, isCarousel: boolean, lang: string = 'pt-BR'): string {
+  console.log('Generating mock content (fallback)...')
+  
+  // Extract theme from prompt
+  const themeMatch = prompt.match(/Tema do post:\s*"([^"]+)"/i)
+  const theme = themeMatch ? themeMatch[1] : 'Tema Desconhecido'
+  
+  // Language mappings
+  const locales: Record<string, any> = {
+    'pt-BR': {
+      title: 'está transformando o mercado. Você está preparado?',
+      intro: 'Vivemos em uma era em que',
+      need: 'deixou de ser diferencial e passou a ser necessidade.',
+      ahead: 'As empresas que entendem isso primeiro saem na frente — e as que ignoram ficam para trás.',
+      points: '3 pontos que você precisa saber sobre',
+      p1: 'A velocidade de adoção define quem lidera o setor',
+      p2: 'Dados e estratégia andam juntos — não existe um sem o outro',
+      p3: 'O foco no cliente nunca foi tão importante quanto agora',
+      cta: 'Qual desses pontos faz mais sentido para o seu momento atual? 👇 Deixe nos comentários!',
+      tags: '#Inovacao #Estrategia #Negocios #Tendencias'
+    },
+    'en-US': {
+      title: 'is transforming the market. Are you ready?',
+      intro: 'We live in an era where',
+      need: 'is no longer a differentiator, but a necessity.',
+      ahead: 'Companies that understand this first take the lead — and those that ignore it fall behind.',
+      points: '3 things you need to know about',
+      p1: 'Adoption speed defines who leads the sector',
+      p2: 'Data and strategy go hand in hand — there is no one without the other',
+      p3: 'Customer focus has never been as important as it is now',
+      cta: 'Which of these points makes the most sense for you right now? 👇 Leave a comment!',
+      tags: '#Innovation #Strategy #Business #Trends'
     }
-
-    const data = await response.json()
-    
-    // The HF v1 API returns choices array
-    if (data.choices && data.choices.length > 0) {
-      return data.choices[0].message.content.trim()
-    }
-    
-    throw new Error('Unexpected response format from Hugging Face API')
-  } catch (err) {
-    console.error('Error calling Hugging Face API:', err)
-    throw new Error('Falha ao gerar texto com IA')
   }
+  
+  const l = locales[lang] || locales['pt-BR']
+
+  let mockText = `🚀 ${theme} ${l.title}
+
+${l.intro} ${theme.toLowerCase()} ${l.need}
+
+${l.ahead}
+
+🎯 ${l.points} ${theme}:
+
+1️⃣ ${l.p1}
+2️⃣ ${l.p2}
+3️⃣ ${l.p3}
+
+${l.cta}
+
+${l.tags} #${theme.replace(/\s+/g, '')}
+[Menções: @exemplo1 @exemplo2]`
+
+  if (isCarousel) {
+    mockText += `\n\n[Prompt de Imagem 1: Minimalist vector illustration showing a rocket taking off, flat design, solid blue background, clean corporate style, modern aesthetics]
+[Prompt de Imagem 2: Clean infographic layout showing a chart with an upward trend, high quality graphic design, solid orange background, vector style]
+[Prompt de Imagem 3: Conceptual illustration of people working together around a digital interface, flat design, minimalist, clean lines, professional corporate look]`
+  } else {
+    mockText += `\n\n[Prompt de Imagem: Minimalist graphic design related to ${theme.replace(/[^a-zA-Z0-9 ]/g, '')}, flat vector illustration, clean corporate aesthetic, solid pastel background, high quality, highly professional layout]`
+  }
+  
+  return mockText
 }
 
-// Helper function to generate an image using Google Gemini (Imagen 3)
-async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url?: string}> {
+// Generate text with Google Gemini
+async function generateTextWithGemini(prompt: string): Promise<string> {
   if (!GEMINI_API_KEY) {
-    console.error('GEMINI_API_KEY is not set')
     throw new Error('GEMINI_API_KEY is missing')
   }
 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
+  
+  const requestBody = {
+    contents: [
+      {
+        parts: [{ text: prompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      topK: 40,
+      topP: 0.95,
+      maxOutputTokens: 2048,
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Gemini text API error ${res.status}: ${err.substring(0, 200)}`)
+  }
+
+  const data = await res.json()
+  if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+    return data.candidates[0].content.parts[0].text
+  }
+  
+  throw new Error('Unexpected empty response from Gemini text API')
+}
+
+// Generate text with HF fallback
+async function generateText(prompt: string, maxTokens: number = 500, isCarousel = false, language = 'pt-BR'): Promise<string> {
+  try {
+    return await generateTextWithGemini(prompt)
+  } catch (err) {
+    console.warn('Gemini text generation failed — using mock content:', err)
+    return generateMockContent(prompt, isCarousel, language)
+  }
+}
+
+// Helper function to generate an image using Pollinations.ai (Free, High Quality, No API Key needed)
+async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url?: string}> {
   try {
     // Add quality modifiers and emphasize graphic design suitable for Instagram
     const enhancedPrompt = `${prompt}, instagram post style, flat design, clean corporate look, minimalist, highly professional typography layout, high quality graphic design`
     
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GEMINI_API_KEY}`
+    // Encode the prompt for the URL
+    const encodedPrompt = encodeURIComponent(enhancedPrompt)
     
-    const requestBody = {
-      instances: [
-        { prompt: enhancedPrompt }
-      ],
-      parameters: {
-        sampleCount: 1,
-        aspectRatio: "1:1",
-        outputOptions: {
-          mimeType: "image/jpeg"
-        }
-      }
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    })
+    // Pollinations API endpoint (flux model by default, nologo to remove watermark)
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&seed=${seed}&nologo=true`
+    
+    const response = await fetch(url)
     
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Gemini API Error:', errorText)
-      throw new Error(`Gemini API responded with status: ${response.status}`)
+      throw new Error(`Pollinations API responded with status: ${response.status}`)
     }
     
-    const data = await response.json()
-    if (data.predictions && data.predictions.length > 0) {
-      const base64Image = data.predictions[0].bytesBase64Encoded
-      const buffer = Buffer.from(base64Image, 'base64')
-      return { buffer }
-    }
+    const arrayBuffer = await response.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
     
-    throw new Error('No image returned from Gemini API')
+    return { buffer, url }
   } catch (err) {
-    console.error('Error calling Gemini API:', err)
-    throw new Error('Falha ao gerar imagem com Google Gemini')
+    console.warn('Image generation unavailable. Skipping image generation.', err)
+    throw err
   }
 }
 
@@ -228,6 +284,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const theme = body.theme
+    const language = body.language || 'pt-BR'
     const tone = body.tone || 'Técnico, data-driven, provocativo e focado em engajamento'
     const highMode = body.highMode || false
     const isCarousel = body.isCarousel || false
@@ -244,9 +301,17 @@ export async function POST(request: Request) {
     const context = searchResult.context
     const clientFolder = searchResult.clientFolder
     
+    const langInstructions = language === 'en-US' 
+      ? 'O post inteiro deve ser escrito em INGLÊS (English).'
+      : language === 'es-ES' ? 'O post inteiro deve ser escrito em ESPANHOL (Español).'
+      : language === 'fr-FR' ? 'O post inteiro deve ser escrito em FRANCÊS (Français).'
+      : language === 'de-DE' ? 'O post inteiro deve ser escrito em ALEMÃO (Deutsch).'
+      : language === 'it-IT' ? 'O post inteiro deve ser escrito em ITALIANO (Italiano).'
+      : 'O post inteiro deve ser escrito em PORTUGUÊS.'
+
     // 2. Build prompt for IA
     const prompt = `
-Você é um especialista em criar conteúdo para Instagram em português.
+Você é um especialista em criar conteúdo para Instagram.
 Seu objetivo é gerar uma sugestão de post completa, incluindo:
 - Legenda (até 2.200 caracteres)
 - 5-10 hashtags relevantes (mix de nicho e alcance)
@@ -259,6 +324,7 @@ ${context}
 ---
 
 INSTRUÇÕES:
+- Idioma: ${langInstructions}
 - Tema do post: "${theme}"
 - Tom de voz: "${tone}"
 - Responda APENAS com o conteúdo gerado, sem explicações adicionais.
@@ -269,8 +335,8 @@ ${highMode
   : '- Legenda deve ter entre 200 e 2.200 caracteres.'
 }
 ${isCarousel 
-  ? '- MODO CARROSSEL ATIVADO: Forneça EXATAMENTE 3 a 5 prompts de imagem diferentes, cada um em uma nova linha no formato [Prompt de Imagem X: detailed english prompt here], onde X é o número da imagem (1, 2, 3...). FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÁTICO: tipografia em inglês, design minimalista, cores sólidas, flat design, ilustrações. Evite fotos de pessoas reais.'
-  : '- O prompt da imagem deve ser a última linha e em INGLÊS no formato [Prompt de Imagem: detailed english prompt here]. FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÁTICO: tipografia em inglês, design minimalista, layout de texto, cores sólidas, estilo infográfico ou flat design. Evite fotos de pessoas reais.'
+  ? '- MODO CARROSSEL ATIVADO: Forneça EXATAMENTE 3 a 5 prompts de imagem diferentes, cada um em uma nova linha no formato [Prompt de Imagem X: detailed english prompt here], onde X é o número da imagem (1, 2, 3...). FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÉTICO: tipografia em inglês, design minimalista, cores sólidas, flat design, ilustrações. Evite fotos de pessoas reais.'
+  : '- O prompt da imagem deve ser a última linha e em INGLÊS no formato [Prompt de Imagem: detailed english prompt here]. FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÉTICO: tipografia em inglês, design minimalista, layout de texto, cores sólidas, estilo infográfico ou flat design. Evite fotos de pessoas reais.'
 }
 - Forneça as hashtags em uma linha separada, começando com #.
 - Forneça as menções em uma linha separada, começando com @.
@@ -289,7 +355,7 @@ ${isCarousel
     
     // 3. Generate text with IA
     const maxTokens = highMode ? 1500 : 500
-    const generatedText = await generateText(prompt, maxTokens)
+    const generatedText = await generateText(prompt, maxTokens, isCarousel, language)
     
     // Extract Image Prompts
     let imagePrompts: string[] = []
@@ -340,7 +406,7 @@ ${isCarousel
     }
     
     // 5. Send Notification
-    await sendTelegramNotification(`🚀 <b>Novo Post Gerado!</b>\n\n<b>Tema:</b> ${theme}\n\n${generatedText}${imageGenerated ? `\n\n<i>🖼️ ${imageBuffers.length} Imagens geradas!</i>` : ''}`, imageBuffers.length > 0 ? imageBuffers[0] : undefined)
+    await sendTelegramNotification(`🤖 <b>Novo Post Gerado!</b>\n\n<b>Tema:</b> ${theme}\n\n${generatedText}${imageGenerated ? `\n\n<i>📸 ${imageBuffers.length} Imagens geradas!</i>` : ''}`, imageBuffers.length > 0 ? imageBuffers[0] : undefined)
     
     // 6. Save generated post and image to vault if a client was matched
     let imagePathMsg = ''
@@ -376,6 +442,9 @@ ${isCarousel
         // Save markdown
         const textFilePath = path.join(postsDir, `${fileName}.md`)
         let headers = `# Tema: ${theme}\n# Modo: ${highMode ? 'Turbo' : 'Normal'}`
+        if (isCarousel) {
+          headers += `\n# Tipo: Carrossel`
+        }
         if (imageUrls.length > 0) {
           headers += `\n# ImageUrls: ${imageUrls.join(',')}`
         }

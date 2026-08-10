@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     if (body.vaultPath !== undefined) configToSave.vaultPath = body.vaultPath;
     if (body.instagramToken !== undefined) configToSave.instagramToken = body.instagramToken;
     if (body.instagramAccountId !== undefined) configToSave.instagramAccountId = body.instagramAccountId;
+    if (body.defaultLanguage !== undefined) configToSave.defaultLanguage = body.defaultLanguage;
     
     saveGlobalConfig(configToSave);
     

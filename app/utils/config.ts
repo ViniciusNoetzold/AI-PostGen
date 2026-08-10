@@ -5,6 +5,7 @@ export interface GlobalConfig {
   vaultPath: string;
   instagramToken?: string;
   instagramAccountId?: string;
+  defaultLanguage?: string;
 }
 
 const CONFIG_FILE_PATH = path.join(process.cwd(), 'global_config.json');
@@ -22,6 +23,7 @@ export const getGlobalConfig = (): GlobalConfig => {
   // Default values if config doesn't exist
   return {
     vaultPath: path.join(process.cwd(), '../Obsidian vault neural brain'),
+    defaultLanguage: 'pt-BR',
   };
 };
 

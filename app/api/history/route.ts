@@ -33,15 +33,19 @@ export async function GET() {
                 const lines = content.split('\n')
                 let theme = 'Sem tema'
                 let mode = 'Normal'
+                let isCarousel = false
                 let imageUrls: string[] = []
                 let bodyStartIndex = 0
                 
-                for (let i = 0; i < Math.min(10, lines.length); i++) {
+                for (let i = 0; i < Math.min(15, lines.length); i++) {
                   if (lines[i].startsWith('# Tema:')) {
                     theme = lines[i].replace('# Tema:', '').trim()
                     bodyStartIndex = Math.max(bodyStartIndex, i + 1)
                   } else if (lines[i].startsWith('# Modo:')) {
                     mode = lines[i].replace('# Modo:', '').trim()
+                    bodyStartIndex = Math.max(bodyStartIndex, i + 1)
+                  } else if (lines[i].startsWith('# Tipo:')) {
+                    if (lines[i].includes('Carrossel')) isCarousel = true
                     bodyStartIndex = Math.max(bodyStartIndex, i + 1)
                   } else if (lines[i].startsWith('# ImageUrls:')) {
                     const urlsRaw = lines[i].replace('# ImageUrls:', '').trim()
@@ -62,6 +66,7 @@ export async function GET() {
                   client: clientFolder,
                   theme: theme,
                   mode: mode,
+                  isCarousel: isCarousel || imageUrls.length > 1,
                   imageUrls: imageUrls,
                   imageUrl: imageUrls.length > 0 ? imageUrls[0] : '', // Keep backward compatibility for single image
                   content: body,
