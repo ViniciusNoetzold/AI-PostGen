@@ -2,32 +2,33 @@ import { NextResponse } from 'next/server'
 import axios from 'axios'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { getVaultPath } from '../../utils/config'
 
 // Configuration
-const VAULT_PATH = path.join(process.cwd(), '..', 'Obsidian vault neural brain')
 const HF_API_URL = 'https://router.huggingface.co/v1/chat/completions'
 const HF_MODEL = 'Qwen/Qwen2.5-7B-Instruct'
 const HF_TOKEN = process.env.NEXT_PUBLIC_HF_TOKEN
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 
 // Helper to send telegram message
-async function sendTelegramNotification(message: string, imageUrl?: string) {
+async function sendTelegramNotification(message: string, imageBuffer?: Buffer) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.log('Telegram credentials not configured. Skipping notification.')
     return
   }
   
   try {
-    if (imageUrl) {
+    if (imageBuffer) {
       const photoUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
+      const formData = new FormData()
+      formData.append('chat_id', TELEGRAM_CHAT_ID)
+      formData.append('photo', new Blob([imageBuffer], { type: 'image/jpeg' }), 'image.jpg')
+      
       await fetch(photoUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          photo: imageUrl
-        })
+        body: formData
       })
     }
 
@@ -78,6 +79,7 @@ async function findMarkdownFiles(dir: string): Promise<string[]> {
 // Helper function to search the vault for relevant context
 async function searchVault(query: string): Promise<{context: string, clientFolder: string | null}> {
   try {
+    const VAULT_PATH = await getVaultPath();
     const clientsDir = path.join(VAULT_PATH, '02-Clientes')
     
     // Get all client folders
@@ -167,27 +169,57 @@ async function generateText(prompt: string, maxTokens: number = 500): Promise<st
   }
 }
 
-// Helper function to generate an image using Pollinations AI
-async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url: string}> {
+// Helper function to generate an image using Google Gemini (Imagen 3)
+async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url?: string}> {
+  if (!GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY is not set')
+    throw new Error('GEMINI_API_KEY is missing')
+  }
+
   try {
-    // Add quality modifiers and emphasize graphic design
-    const enhancedPrompt = `${prompt}, high quality graphic design, clean layout, professional, vector art style, masterpiece, 8k resolution`
-    const encodedPrompt = encodeURIComponent(enhancedPrompt)
+    // Add quality modifiers and emphasize graphic design suitable for Instagram
+    const enhancedPrompt = `${prompt}, instagram post style, flat design, clean corporate look, minimalist, highly professional typography layout, high quality graphic design`
     
-    // 1080x1080 is ideal for Instagram posts
-    // Using model=flux for significantly better quality and text rendering, and enhance=true
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&seed=${seed}&model=flux&enhance=true`
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GEMINI_API_KEY}`
     
-    const response = await fetch(url)
+    const requestBody = {
+      instances: [
+        { prompt: enhancedPrompt }
+      ],
+      parameters: {
+        sampleCount: 1,
+        aspectRatio: "1:1",
+        outputOptions: {
+          mimeType: "image/jpeg"
+        }
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    })
+    
     if (!response.ok) {
-      throw new Error(`Pollinations API responded with status: ${response.status}`)
+      const errorText = await response.text()
+      console.error('Gemini API Error:', errorText)
+      throw new Error(`Gemini API responded with status: ${response.status}`)
     }
     
-    const arrayBuffer = await response.arrayBuffer()
-    return { buffer: Buffer.from(arrayBuffer), url }
+    const data = await response.json()
+    if (data.predictions && data.predictions.length > 0) {
+      const base64Image = data.predictions[0].bytesBase64Encoded
+      const buffer = Buffer.from(base64Image, 'base64')
+      return { buffer }
+    }
+    
+    throw new Error('No image returned from Gemini API')
   } catch (err) {
-    console.error('Error calling Pollinations API:', err)
-    throw new Error('Falha ao gerar imagem')
+    console.error('Error calling Gemini API:', err)
+    throw new Error('Falha ao gerar imagem com Google Gemini')
   }
 }
 
@@ -295,23 +327,26 @@ ${isCarousel
       for (const res of results) {
         if (res.status === 'fulfilled') {
           imageBuffers.push(res.value.buffer)
-          imageUrls.push(res.value.url)
+          if (res.value.url) {
+            imageUrls.push(res.value.url)
+          }
         } else {
           console.error('Failed to generate one of the images:', res.reason)
         }
       }
-      if (imageUrls.length > 0) imageGenerated = true
+      if (imageBuffers.length > 0) imageGenerated = true
     } catch (err) {
       console.error('Failed to generate images, continuing without them.')
     }
     
     // 5. Send Notification
-    await sendTelegramNotification(`🚀 <b>Novo Post Gerado!</b>\n\n<b>Tema:</b> ${theme}\n\n${generatedText}${imageGenerated ? `\n\n<i>🖼️ ${imageUrls.length} Imagens geradas!</i>` : ''}`, imageUrls[0])
+    await sendTelegramNotification(`🚀 <b>Novo Post Gerado!</b>\n\n<b>Tema:</b> ${theme}\n\n${generatedText}${imageGenerated ? `\n\n<i>🖼️ ${imageBuffers.length} Imagens geradas!</i>` : ''}`, imageBuffers.length > 0 ? imageBuffers[0] : undefined)
     
     // 6. Save generated post and image to vault if a client was matched
     let imagePathMsg = ''
     if (clientFolder) {
       try {
+        const VAULT_PATH = await getVaultPath();
         const postsDir = path.join(VAULT_PATH, '02-Clientes', clientFolder, '04-Posts_Gerados')
         const imagesDir = path.join(VAULT_PATH, '02-Clientes', clientFolder, '05-Imagens_Geradas')
         

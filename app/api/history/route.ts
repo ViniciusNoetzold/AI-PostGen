@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
-
-const VAULT_PATH = path.join(process.cwd(), '..', 'Obsidian vault neural brain')
+import { getVaultPath } from '../../utils/config'
 
 export async function GET() {
   try {
+    const VAULT_PATH = getVaultPath()
     const clientsDir = path.join(VAULT_PATH, '02-Clientes')
     const clientFolders = await fs.readdir(clientsDir)
     

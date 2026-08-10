@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI PostGen - Automação Meta & Obsidian
 
-## Getting Started
+Este é um sistema completo para geração de posts (com imagens e textos longos otimizados para Instagram) gerenciados através de uma base de conhecimento no **Obsidian** e integração direta com as APIs do Facebook/Instagram e modelos de IA (HuggingFace, Gemini, etc.).
 
-First, run the development server:
+## 🚀 Como Usar em Outro Computador
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Como todo o sistema, incluindo o cofre (vault) do Obsidian e as variáveis de ambiente, estão neste repositório, os passos para iniciar em um novo computador são muito simples:
+
+### Pré-requisitos
+- Ter o [Node.js](https://nodejs.org/) instalado.
+- Ter o [PNPM](https://pnpm.io/) instalado (`npm install -g pnpm`).
+- Ter o [Obsidian](https://obsidian.md/) instalado (opcional, para visualizar os arquivos nativamente, mas não obrigatório para a aplicação rodar).
+
+### Passo a Passo
+
+1. **Clone o repositório:**
+   ```bash
+   git clone https://github.com/ViniciusNoetzold/AI-PostGen.git
+   cd AI-PostGen/webapp
+   ```
+
+2. **Instale as dependências:**
+   ```bash
+   pnpm install
+   ```
+
+3. **Inicie o servidor de desenvolvimento:**
+   ```bash
+   pnpm run dev
+   ```
+
+4. **Configuração Inicial na Aplicação:**
+   - Acesse o sistema através do navegador em `http://localhost:3000`.
+   - Clique no **ícone de engrenagem no canto superior direito**.
+   - No modal de Configuração Global, aponte o **Caminho do Vault** para a pasta `Obsidian vault neural brain` que está dentro do repositório (ex: `C:\Seu\Caminho\AI-PostGen\webapp\Obsidian vault neural brain`).
+   - Insira o Token de Acesso da Meta e o ID da Conta (caso não estejam preenchidos) e clique em **Salvar Configurações**.
+
+## 🧠 Estrutura do Vault (Obsidian)
+
+A pasta `Obsidian vault neural brain` contém toda a estrutura de clientes e a base de conhecimento. 
+Sempre que o sistema gerar novos posts ou você criar novos resumos de clientes, eles serão salvos/lidos dessa pasta.
+
+```
+Obsidian vault neural brain/
+├── 02-Clientes/
+│   ├── Nome do Cliente/
+│   │   ├── 04-Posts_Gerados/ (Posts salvos em Markdown)
+│   │   ├── 05-Imagens_Geradas/ (Imagens geradas pela IA)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## ⚙️ Tecnologias Utilizadas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Next.js (App Router)** - Framework React Fullstack.
+- **Hugging Face / Gemini API** - Modelos para criação do texto e imagem.
+- **Meta Graph API** - Para publicação direta de posts únicos e carrosséis no Instagram.
+- **React Force Graph 2D** - Visualização Neural (semelhante ao gráfico do Obsidian) do estado atual do seu Vault.
+- **Recharts** - Painéis de análises estatísticas.
+- **Tailwind CSS** - Estilização moderna.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔒 Variáveis de Ambiente e Segurança
+O arquivo `.env` está incluído no repositório (conforme solicitado). **Certifique-se de que o repositório no GitHub esteja configurado como PRIVADO**, já que essas chaves podem permitir acesso indevido se vazarem.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Contribuição
+Para adicionar novos clientes, basta criar uma nova pasta dentro de `02-Clientes` no vault do Obsidian. O sistema fará a varredura e adaptação de voz automaticamente de acordo com as notas lá descritas.

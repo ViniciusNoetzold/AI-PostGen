@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { 
   Brain, Bell, UserCircle, Search, Trash2, Edit3, 
-  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight 
+  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight, X, Settings
 } from 'lucide-react'
+import VaultVisualization from './components/VaultVisualization'
 
 export default function Home() {
   const [theme, setTheme] = useState('')
@@ -28,6 +29,22 @@ export default function Home() {
   const [usageCount, setUsageCount] = useState(0)
   const [timeLeft, setTimeLeft] = useState('')
   const MAX_LIMIT = 20
+
+  // New UI states
+  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
+  
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editingPost, setEditingPost] = useState<any>(null)
+  const [editContent, setEditContent] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  
+  // Config Modal State
+  const [configModalOpen, setConfigModalOpen] = useState(false)
+  const [vaultPath, setVaultPath] = useState('')
+  const [instagramToken, setInstagramToken] = useState('')
+  const [instagramAccountId, setInstagramAccountId] = useState('')
+  const [savingConfig, setSavingConfig] = useState(false)
 
   useEffect(() => {
     const storedDate = localStorage.getItem('usageDate')
@@ -56,6 +73,7 @@ export default function Home() {
     updateTimer()
     const interval = setInterval(updateTimer, 60000)
     fetchHistory()
+    fetchConfig()
     
     return () => clearInterval(interval)
   }, [])
@@ -73,6 +91,20 @@ export default function Home() {
       console.error('Error fetching history:', err)
     } finally {
       setLoadingHistory(false)
+    }
+  }
+
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch('/api/config')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.vaultPath) setVaultPath(data.vaultPath)
+        if (data.instagramToken) setInstagramToken(data.instagramToken)
+        if (data.instagramAccountId) setInstagramAccountId(data.instagramAccountId)
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err)
     }
   }
 
@@ -95,9 +127,33 @@ export default function Home() {
   const handleArchive = async (client: string, id: string) => {
     alert('Função de arquivamento em desenvolvimento. No momento pode ser feito localmente no Obsidian.')
   }
+  
+  const handleEdit = (post: any) => {
+    setEditingPost(post)
+    setEditContent(post.content)
+    setEditModalOpen(true)
+  }
 
-  const handleEdit = () => {
-    alert('A edição nativa na UI ainda está em desenvolvimento. Por favor, edite diretamente no Obsidian no momento.')
+  const saveEdit = async () => {
+    if (!editingPost) return;
+    setSavingEdit(true)
+    try {
+      const res = await fetch('/api/history/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client: editingPost.client, id: editingPost.id, newContent: editContent })
+      })
+      if (res.ok) {
+        setEditModalOpen(false)
+        fetchHistory()
+      } else {
+        alert('Erro ao salvar edição.')
+      }
+    } catch (e) {
+      alert('Erro de conexão ao salvar edição.')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const handlePublishToInstagram = async (post: any) => {
@@ -122,15 +178,46 @@ export default function Home() {
       
       const data = await res.json()
       if (res.ok) {
-        alert('✅ Post publicado com sucesso no Instagram!\nID: ' + data.id)
+        alert('✅ Post publicado com sucesso no Instagram!\\nID: ' + data.id)
       } else {
-        alert('❌ Erro: ' + data.error)
+        if (data.needsConfig) {
+          alert('❌ Credenciais do Instagram não configuradas para este cliente. Clique no botão de engrenagem ⚙️ (Configurar Instagram) ao lado do botão de publicar.')
+        } else {
+          alert('❌ Erro: ' + data.error)
+        }
       }
     } catch (err) {
       console.error(err)
       alert('Erro de conexão ao tentar publicar')
     } finally {
       setPublishing(prev => ({ ...prev, [post.id]: false }))
+    }
+  }
+
+  const saveConfig = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingConfig(true)
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          vaultPath: vaultPath, 
+          instagramToken: instagramToken, 
+          instagramAccountId: instagramAccountId 
+        })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert('Configurações globais salvas com sucesso!')
+        setConfigModalOpen(false)
+      } else {
+        alert('Erro: ' + data.error)
+      }
+    } catch (err) {
+      alert('Erro de conexão ao salvar configuração')
+    } finally {
+      setSavingConfig(false)
     }
   }
 
@@ -194,6 +281,13 @@ export default function Home() {
           <span className="font-semibold text-xl tracking-tight">AI-PostGen</span>
         </div>
         <div className="flex items-center gap-5">
+          <button 
+            onClick={() => setConfigModalOpen(true)}
+            className="relative p-1 hover:bg-slate-700 rounded-full transition-colors"
+            title="Configurações Globais"
+          >
+            <Settings className="w-5 h-5 text-gray-300" />
+          </button>
           <button className="relative p-1 hover:bg-slate-700 rounded-full transition-colors">
             <Bell className="w-5 h-5 text-gray-300" />
             <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#2a3645]"></span>
@@ -333,8 +427,15 @@ export default function Home() {
           )}
         </section>
 
-        {/* Right Column - History */}
-        <section className="bg-white rounded-[20px] shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+        {/* Right Column - History & Viz */}
+        <div className="flex flex-col gap-6 overflow-hidden">
+          {/* Visualizations */}
+          <div className="h-[400px] sm:h-[500px] rounded-[20px] shadow-lg overflow-hidden flex-shrink-0">
+            <VaultVisualization />
+          </div>
+
+          {/* History */}
+          <section className="bg-white rounded-[20px] shadow-lg border border-gray-100 flex flex-col overflow-hidden flex-1">
           
           {/* History Header */}
           <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white z-10 relative">
@@ -390,7 +491,7 @@ export default function Home() {
                   const snippet = post.content.substring(0, 120) + (post.content.length > 120 ? '...' : '');
                   
                   return (
-                    <div key={post.id || idx} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col sm:flex-row h-auto sm:h-48">
+                    <div key={post.id || idx} className={`bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col sm:flex-row h-auto ${expandedPosts[post.id] ? 'sm:min-h-48' : 'sm:h-48'}`}>
                       {/* Image Side */}
                       <div className="w-full sm:w-48 h-48 sm:h-full flex-shrink-0 bg-gray-100 relative">
                         {coverImage ? (
@@ -444,7 +545,7 @@ export default function Home() {
                               <Trash2 className="w-4 h-4" />
                             </button>
                             <button 
-                              onClick={handleEdit}
+                              onClick={() => handleEdit(post)}
                               title="Editar"
                               className="w-8 h-8 flex items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 hover:bg-emerald-200 transition-colors"
                             >
@@ -471,14 +572,16 @@ export default function Home() {
                         </div>
 
                         {/* Text Snippet */}
-                        <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-600 mt-auto relative">
-                          <p className="line-clamp-2">{snippet}</p>
-                          <div className="text-center mt-1">
+                        <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 mt-auto relative flex flex-col min-h-0">
+                          <div className={`text-xs text-gray-600 flex-1 overflow-y-auto ${expandedPosts[post.id] ? 'whitespace-pre-wrap max-h-60' : 'line-clamp-2'}`}>
+                            {expandedPosts[post.id] ? post.content : snippet}
+                          </div>
+                          <div className="text-center mt-2 flex-shrink-0">
                             <button 
-                              onClick={() => alert('Para ler mais, verifique o arquivo original no Obsidian ou copie o texto!')}
+                              onClick={() => setExpandedPosts(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
                               className="text-blue-500 font-medium hover:underline text-[11px]"
                             >
-                              Ler Mais v
+                              {expandedPosts[post.id] ? 'Ler Menos ^' : 'Ler Mais v'}
                             </button>
                           </div>
                         </div>
@@ -535,7 +638,8 @@ export default function Home() {
               Total: {filteredHistory.length}
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       {/* Footer */}
@@ -549,6 +653,123 @@ export default function Home() {
           Powered by <span className="font-semibold text-gray-700">AI-PostGen</span>
         </div>
       </footer>
+
+      {/* Edit Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800">Editar Post</h2>
+              <button onClick={() => setEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="w-full h-full min-h-[400px] p-4 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+              <button 
+                onClick={() => setEditModalOpen(false)}
+                className="px-5 py-2 text-gray-600 font-medium hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Config Modal */}
+      {configModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800">Configurações Globais</h2>
+              <button onClick={() => setConfigModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={saveConfig}>
+              <div className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[60vh]">
+                
+                {/* Vault Section */}
+                <div className="mb-2">
+                  <h3 className="text-lg font-bold text-gray-800 mb-2 border-b pb-1">Banco de Dados (Cofre)</h3>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Caminho absoluto para a pasta principal do cofre no seu computador. (ex: E:\\Caminho\\Para\\Cofre)
+                  </p>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-800 mb-1">Caminho do Cofre</label>
+                    <input
+                      type="text"
+                      required
+                      value={vaultPath}
+                      onChange={(e) => setVaultPath(e.target.value)}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
+                      placeholder="C:\Users\User\Documents\Obsidian Vault"
+                    />
+                  </div>
+                </div>
+
+                {/* Instagram Section */}
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2 border-b pb-1">Instagram</h3>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Credenciais globais da API do Instagram (Graph API) para publicar automaticamente.
+                  </p>
+                  <div className="mb-3">
+                    <label className="block text-sm font-bold text-gray-800 mb-1">Access Token</label>
+                    <input
+                      type="text"
+                      value={instagramToken}
+                      onChange={(e) => setInstagramToken(e.target.value)}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
+                      placeholder="EAA..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-800 mb-1">Account ID</label>
+                    <input
+                      type="text"
+                      value={instagramAccountId}
+                      onChange={(e) => setInstagramAccountId(e.target.value)}
+                      className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
+                      placeholder="178414..."
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setConfigModalOpen(false)}
+                  className="px-5 py-2 text-gray-600 font-medium hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={savingConfig}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {savingConfig ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

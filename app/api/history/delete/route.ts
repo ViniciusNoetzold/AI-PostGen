@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
-
-const VAULT_PATH = path.join(process.cwd(), '..', 'Obsidian vault neural brain')
+import { getVaultPath } from '../../../utils/config'
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +10,8 @@ export async function POST(request: Request) {
     if (!client || !id) {
       return NextResponse.json({ error: 'Client and ID are required' }, { status: 400 })
     }
+    
+    const VAULT_PATH = getVaultPath()
     
     // Delete post .md file
     const postPath = path.join(VAULT_PATH, '02-Clientes', client, '04-Posts_Gerados', id)

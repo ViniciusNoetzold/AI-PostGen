@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getVaultPath, getGlobalConfig } from '../../../utils/config';
 
 // Define o caminho para a pasta principal do vault do cliente
-const getVaultPath = (clientName: string) => {
+const getClientVaultPath = async (clientName: string) => {
   // Converte o nome de cliente (ex: Mezzold Studio) para o formato da pasta,
   // ou simplesmente tenta achar a pasta do cliente.
-  const baseClientsPath = 'E:/App Automação Meta/Obsidian vault neural brain/02-Clientes';
+  const vaultPath = await getVaultPath();
+  const baseClientsPath = path.join(vaultPath, '02-Clientes');
   
   // Tenta encontrar a pasta exata ou ignorando case
   if (fs.existsSync(baseClientsPath)) {
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const clientPath = getVaultPath(client);
+    const clientPath = await getClientVaultPath(client);
     
     if (!clientPath) {
       return NextResponse.json(
@@ -52,27 +54,33 @@ export async function POST(req: Request) {
 
     const configPath = path.join(clientPath, 'instagram_config.json');
 
-    if (!fs.existsSync(configPath)) {
-      // Cria um template vazio para o usuário preencher
-      const template = {
-        INSTAGRAM_ACCESS_TOKEN: "",
-        INSTAGRAM_ACCOUNT_ID: ""
-      };
-      fs.writeFileSync(configPath, JSON.stringify(template, null, 2), 'utf-8');
-      
-      return NextResponse.json(
-        { error: `Configuração do Instagram não encontrada para este cliente. Um arquivo vazio foi criado em: ${configPath}. Preencha-o com as credenciais da Meta.` },
-        { status: 400 }
-      );
+    let accessToken = null;
+    let accountId = null;
+
+    if (fs.existsSync(configPath)) {
+      const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      accessToken = configData.INSTAGRAM_ACCESS_TOKEN;
+      accountId = configData.INSTAGRAM_ACCOUNT_ID;
     }
 
-    const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    const accessToken = configData.INSTAGRAM_ACCESS_TOKEN;
-    const accountId = configData.INSTAGRAM_ACCOUNT_ID;
+    // Fallback to global config
+    if (!accessToken || !accountId) {
+      const globalConfig = await getGlobalConfig();
+      if (!accessToken) accessToken = globalConfig.instagramToken;
+      if (!accountId) accountId = globalConfig.instagramAccountId;
+    }
 
     if (!accessToken || !accountId) {
+      // Cria um template vazio para o usuário preencher (se não existir)
+      if (!fs.existsSync(configPath)) {
+        const template = {
+          INSTAGRAM_ACCESS_TOKEN: "",
+          INSTAGRAM_ACCOUNT_ID: ""
+        };
+        fs.writeFileSync(configPath, JSON.stringify(template, null, 2), 'utf-8');
+      }
       return NextResponse.json(
-        { error: `O arquivo instagram_config.json de "${client}" está vazio ou faltando informações. Preencha as credenciais.` },
+        { error: `O arquivo de configuração está vazio ou faltando informações, e a configuração global também não está definida.`, needsConfig: true },
         { status: 400 }
       );
     }
