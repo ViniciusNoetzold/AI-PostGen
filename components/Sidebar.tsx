@@ -20,6 +20,7 @@ import { Show, useClerk, useUser } from '@clerk/nextjs';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { BrandLogo } from '@/components/BrandLogo';
 import { saveUserProfile, useUserProfile, type UserProfile } from '@/lib/user-profile';
 
 export function cn(...inputs: ClassValue[]) {
@@ -269,14 +270,8 @@ export function Sidebar({ authConfigured }: { authConfigured: boolean }) {
     <>
       <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-950 md:flex">
         <div className="px-6 pb-5 pt-7">
-          <Link href="/" className="inline-flex items-center gap-3 text-white" aria-label="Ir para o dashboard">
-            <span className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-pink-500 to-violet-600 shadow-lg shadow-pink-950/30">
-              <PenTool className="size-5" />
-            </span>
-            <span>
-              <span className="block text-lg font-bold tracking-tight">AI Post Gen</span>
-              <span className="block text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">Content workspace</span>
-            </span>
+          <Link href="/" className="block" aria-label="Omni Workspace — ir para o dashboard">
+            <BrandLogo className="h-12 w-full" nameClassName="text-lg" priority />
           </Link>
         </div>
 

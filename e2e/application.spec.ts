@@ -1,7 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function openPage(page: Page, path: string) {
+  await page.goto(path);
+  const opening = page.getByRole("dialog", { name: "Abertura do Omni Workspace", exact: true });
+  const skipButton = page.getByRole("button", { name: "Pular", exact: true });
+  if (await skipButton.isVisible()) {
+    await skipButton.click();
+    await expect(opening).toBeHidden();
+  }
+}
+
+test("opening video autoplays and can be skipped", async ({ page }) => {
+  await page.goto("/");
+  const opening = page.getByRole("dialog", { name: "Abertura do Omni Workspace", exact: true });
+  const video = opening.locator("video");
+
+  await expect(opening).toBeVisible();
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate((element) => {
+    const media = element as HTMLVideoElement;
+    return !media.paused && media.muted;
+  })).toBe(true);
+
+  await page.getByRole("button", { name: "Pular", exact: true }).click();
+  await expect(opening).toBeHidden();
+});
 
 test("core sections render and APIs validate payloads", async ({ page, request }) => {
-  await page.goto("/");
+  await openPage(page, "/");
   await expect(page.getByRole("heading", { name: "Visão geral" })).toBeVisible();
 
   for (const [path, heading] of [
@@ -12,11 +38,11 @@ test("core sections render and APIs validate payloads", async ({ page, request }
     ["/reports", "Relatórios"],
     ["/settings", "Configurações"],
   ] as const) {
-    await page.goto(path);
+    await openPage(page, path);
     await expect(page.getByRole("heading", { name: heading, exact: false }).first()).toBeVisible();
   }
 
-  await page.goto("/contacts");
+  await openPage(page, "/contacts");
   await expect(page.getByRole("button", { name: "Cidade", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Rede", exact: true }).click();
   await expect(page.getByRole("button", { name: "Rede", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -59,7 +85,7 @@ test("core sections render and APIs validate payloads", async ({ page, request }
   });
   expect(invalidLogo.status()).toBe(422);
 
-  await page.goto("/contacts/network");
+  await openPage(page, "/contacts/network");
   await expect(page.getByRole("heading", { name: "Mapa de relacionamentos" })).toBeVisible();
   await expect(page.getByLabel("Área visual de relacionamentos")).toBeVisible();
   await page.getByRole("button", { name: "Adicionar à empresa" }).click();

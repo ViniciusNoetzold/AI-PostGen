@@ -70,8 +70,8 @@ export default function Home() {
   const itemsPerPage = 5
   
   // Rate limiting states
-  const [usageCount, setUsageCount] = useState(readUsageCount)
-  const [timeLeft, setTimeLeft] = useState(readTimeLeft)
+  const [usageCount, setUsageCount] = useState(0)
+  const [timeLeft, setTimeLeft] = useState('--')
   const MAX_LIMIT = 20
   const [showStats, setShowStats] = useState(true)
 
@@ -168,6 +168,8 @@ export default function Home() {
 
     const interval = setInterval(() => setTimeLeft(readTimeLeft()), 60000)
     queueMicrotask(() => {
+      setUsageCount(readUsageCount())
+      setTimeLeft(readTimeLeft())
       void fetchHistory()
       void fetchConfig()
     })
@@ -616,7 +618,7 @@ export default function Home() {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center flex-col">
-                    <span className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-none">{usageCount}<span className="text-sm font-normal text-gray-400 dark:text-gray-500 dark:text-gray-400">/{MAX_LIMIT}</span></span>
+                    <span className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-none">{usageCount}<span className="text-sm font-normal text-gray-400 dark:text-gray-400">/{MAX_LIMIT}</span></span>
                   </div>
                 </div>
                 

@@ -1,6 +1,8 @@
-# AI PostGen
+# Omni Workspace
 
-Plataforma full-stack para criação, organização, aprovação, agendamento e publicação de conteúdo. O projeto combina inteligência artificial, CRM, calendário de conteúdo, integrações com Meta e Telegram e uma base de conhecimento compatível com Obsidian.
+![Omni Workspace](./public/brand/omni-workspace-logo.png)
+
+Plataforma full-stack para criação, organização, aprovação, agendamento e publicação de conteúdo. O Omni Workspace combina inteligência artificial, CRM, calendário de conteúdo, integrações com Meta e Telegram e uma base de conhecimento compatível com Obsidian.
 
 ## Tecnologias
 
