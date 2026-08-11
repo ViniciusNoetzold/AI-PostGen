@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server'
+import { authorizeRequest } from '@/lib/server/authorization'
+import { telegramNotificationSchema } from '@/lib/schemas/api'
+import { validateJsonRequest } from '@/lib/server/security'
 
 export async function POST(request: Request) {
+  const denied = await authorizeRequest(request, 'editor')
+  if (denied) return denied
   try {
-    const { message, videoUrl, imageUrl } = await request.json()
+    const validated = await validateJsonRequest(request, telegramNotificationSchema)
+    if (!validated.ok) return validated.response
+    const { message, videoUrl, imageUrl } = validated.data
 
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
     const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID

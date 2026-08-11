@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../utils/config'
+import { authorizeRequest } from '@/lib/server/authorization'
+import { generatePostSchema } from '@/lib/schemas/api'
+import { validateJsonRequest } from '@/lib/server/security'
+import { atomicWriteText } from '@/lib/server/atomic-files'
+import { createPostRecord } from '@/lib/server/repository'
+import { normalizeRole } from '@/lib/auth'
+import { requestIdFrom } from '@/lib/server/logger'
 
-// Configuration
-const HF_API_URL = 'https://router.huggingface.co/v1/chat/completions'
-const HF_MODEL = 'Qwen/Qwen2.5-7B-Instruct'
-const HF_TOKEN = process.env.NEXT_PUBLIC_HF_TOKEN
+// Server-only provider configuration. Never use NEXT_PUBLIC_ for credentials.
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
@@ -23,7 +28,7 @@ async function sendTelegramNotification(message: string, imageBuffer?: Buffer) {
       const photoUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
       const formData = new FormData()
       formData.append('chat_id', TELEGRAM_CHAT_ID)
-      formData.append('photo', new Blob([imageBuffer as any], { type: 'image/jpeg' }), 'image.jpg')
+      formData.append('photo', new Blob([new Uint8Array(imageBuffer)], { type: 'image/jpeg' }), 'image.jpg')
       
       await fetch(photoUrl, {
         method: 'POST',
@@ -134,6 +139,25 @@ async function searchVault(query: string): Promise<{context: string, clientFolde
 }
 
 // Function to generate mock content directly without an LLM when API is down
+interface LocaleCopy {
+  title: string
+  intro: string
+  need: string
+  ahead: string
+  points: string
+  p1: string
+  p2: string
+  p3: string
+  cta: string
+  tags: string
+}
+
+interface GeminiTextResponse {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> }
+  }>
+}
+
 function generateMockContent(prompt: string, isCarousel: boolean, lang: string = 'pt-BR'): string {
   console.log('Generating mock content (fallback)...')
   
@@ -142,7 +166,7 @@ function generateMockContent(prompt: string, isCarousel: boolean, lang: string =
   const theme = themeMatch ? themeMatch[1] : 'Tema Desconhecido'
   
   // Language mappings
-  const locales: Record<string, any> = {
+  const locales: Record<string, LocaleCopy> = {
     'pt-BR': {
       title: 'está transformando o mercado. Você está preparado?',
       intro: 'Vivemos em uma era em que',
@@ -200,7 +224,7 @@ ${l.tags} #${theme.replace(/\s+/g, '')}
 }
 
 // Generate text with Google Gemini
-async function generateTextWithGemini(prompt: string): Promise<string> {
+async function generateTextWithGemini(prompt: string, maxTokens: number): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY is missing')
   }
@@ -217,7 +241,7 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
       temperature: 0.7,
       topK: 40,
       topP: 0.95,
-      maxOutputTokens: 2048,
+      maxOutputTokens: maxTokens,
     }
   }
 
@@ -232,10 +256,9 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
     throw new Error(`Gemini text API error ${res.status}: ${err.substring(0, 200)}`)
   }
 
-  const data = await res.json()
-  if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
-    return data.candidates[0].content.parts[0].text
-  }
+  const data = (await res.json()) as GeminiTextResponse
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (text) return text
   
   throw new Error('Unexpected empty response from Gemini text API')
 }
@@ -243,7 +266,7 @@ async function generateTextWithGemini(prompt: string): Promise<string> {
 // Generate text with HF fallback
 async function generateText(prompt: string, maxTokens: number = 500, isCarousel = false, language = 'pt-BR'): Promise<string> {
   try {
-    return await generateTextWithGemini(prompt)
+    return await generateTextWithGemini(prompt, maxTokens)
   } catch (err) {
     console.warn('Gemini text generation failed — using mock content:', err)
     return generateMockContent(prompt, isCarousel, language)
@@ -280,9 +303,13 @@ export async function generateImage(prompt: string, seed: number): Promise<{buff
 
 // Main handler
 export async function POST(request: Request) {
+  const denied = await authorizeRequest(request, 'editor')
+  if (denied) return denied
   try {
-    const body = await request.json()
-    const theme = body.theme
+    const validated = await validateJsonRequest(request, generatePostSchema)
+    if (!validated.ok) return validated.response
+    const body = validated.data
+    const theme = body.theme?.trim()
     const language = body.language || 'pt-BR'
     const tone = body.tone || 'Técnico, data-driven, provocativo e focado em engajamento'
     const highMode = body.highMode || false
@@ -365,34 +392,11 @@ ${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
     const maxTokens = highMode ? 1500 : 500
     const generatedText = await generateText(prompt, maxTokens, isCarousel, language)
     
-    // Extract Image Prompts
-    let imagePrompts: string[] = []
-    
-    if (isCarousel) {
-      const regex = /\[Prompt de Imagem \d+:?([\s\S]*?)\]/gi
-      let match;
-      while ((match = regex.exec(generatedText)) !== null) {
-        if (match[1]) imagePrompts.push(match[1].trim())
-      }
-      if (imagePrompts.length === 0) imagePrompts.push(theme) // Fallback
-    } else {
-      const imagePromptMatch = generatedText.match(/\[Prompt de Imagem:?([\s\S]*?)\]/i)
-      if (imagePromptMatch && imagePromptMatch[1]) {
-        imagePrompts.push(imagePromptMatch[1].trim())
-      } else {
-        imagePrompts.push(theme)
-      }
-    }
-    
-    // 4. Generate Images - Disabled to make it manual
-    let imageGenerated = false
-    let imageBuffers: Buffer[] = []
-    let imageUrls: string[] = []
-    
-    // 5. Send Notification
+    // Image generation remains manual; prompts stay embedded in the Markdown.
+    // 4. Send Notification
     await sendTelegramNotification(`🤖 Novo Post Gerado!\n\nTema: ${theme}\n\n${generatedText}`)
     
-    // 6. Save generated post to vault if a client was matched
+    // 5. Save generated post to vault if a client was matched
     if (clientFolder) {
       try {
         const VAULT_PATH = await getVaultPath();
@@ -404,7 +408,7 @@ ${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
         // Create safe filename
         const safeTheme = theme.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 30)
         const dateStr = new Date().toISOString().split('T')[0]
-        const fileName = `post_${dateStr}_${safeTheme}`
+        const fileName = `post_${dateStr}_${safeTheme}_${randomUUID()}`
         
         // Save markdown
         const textFilePath = path.join(postsDir, `${fileName}.md`)
@@ -419,8 +423,21 @@ ${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
           headers += `\n# Gerar Video: Sim`
         }
         const fileContent = `${headers}\n\n${generatedText}`
-        await fs.writeFile(textFilePath, fileContent, 'utf-8')
+        await atomicWriteText(textFilePath, fileContent)
         console.log(`Post salvo em: ${textFilePath}`)
+
+        const databasePostId = await createPostRecord({
+          actorExternalId: request.headers.get('x-app-user-id') || 'local-development-admin',
+          actorRole: normalizeRole(request.headers.get('x-app-role') || 'admin'),
+          clientName: clientFolder,
+          theme,
+          content: generatedText,
+          language,
+          tone,
+          isCarousel,
+          sourceFile: textFilePath,
+          requestId: requestIdFrom(request),
+        })
         
         // 7. Return the result (with client and postId)
         return NextResponse.json({ 
@@ -428,7 +445,8 @@ ${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
           imageGenerated: false,
           imagePath: '',
           imageUrls: [],
-          postId: fileName,
+          postId: `${fileName}.md`,
+          databasePostId,
           client: clientFolder
         })
       } catch (err) {
@@ -436,12 +454,25 @@ ${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
       }
     }
 
+    const databasePostId = await createPostRecord({
+      actorExternalId: request.headers.get('x-app-user-id') || 'local-development-admin',
+      actorRole: normalizeRole(request.headers.get('x-app-role') || 'admin'),
+      clientName: clientFolder,
+      theme,
+      content: generatedText,
+      language,
+      tone,
+      isCarousel,
+      requestId: requestIdFrom(request),
+    })
+
     // 7. Return the result (fallback if no client matched or failed to save)
     return NextResponse.json({ 
       result: generatedText, 
       imageGenerated: false,
       imagePath: '',
-      imageUrls: []
+      imageUrls: [],
+      databasePostId,
     })
   } catch (error) {
     console.error('Error in generate API:', error)

@@ -1,45 +1,57 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Sparkles, Calendar, ArrowRight, PenTool, Image as ImageIcon } from 'lucide-react';
-import Link from 'next/link';
-
-type DashboardData = {
-  totalContacts: number;
-  totalInteractions: number;
-  activeLeads: number;
-  conversionRate: number;
-  statusCounts: { name: string; value: number }[];
-  upcomingReminders: { id: string, message: string, date: string, contact: { name: string } }[];
-};
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import {
+  Activity,
+  Archive,
+  ArrowRight,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  Images,
+  PenTool,
+  Users,
+} from 'lucide-react'
+import type { DashboardStats } from '@/lib/dashboard'
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<DashboardStats | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then(res => res.json())
-      .then(d => {
-        if (d.error) {
-          setError(d.error);
-        } else {
-          setData(d);
-        }
-      })
-      .catch(err => setError(err.message));
-  }, []);
+    const controller = new AbortController()
+
+    async function loadStats() {
+      try {
+        const response = await fetch('/api/dashboard/stats', {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        const payload: unknown = await response.json()
+        if (!response.ok) throw new Error('Não foi possível carregar as estatísticas.')
+        setData(payload as DashboardStats)
+      } catch (fetchError: unknown) {
+        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return
+        setError(fetchError instanceof Error ? fetchError.message : 'Erro inesperado no dashboard.')
+      }
+    }
+
+    void loadStats()
+    return () => controller.abort()
+  }, [])
+
+  const maxDailyPosts = Math.max(1, ...(data?.postsByDay.map((item) => item.posts) ?? [0]))
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Overview</h1>
-          <p className="text-slate-400 mt-1">Track your interactions and AI insights.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight dark:text-white">Visão geral</h1>
+          <p className="text-slate-400 mt-1">Volumetria real do vault e do Product Studio.</p>
         </div>
-        
-        {/* Quick Access Buttons */}
-        <div className="flex gap-4">
+
+        <div className="flex flex-wrap gap-3">
           <Link href="/ai-post-gen" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-pink-500/20">
             <PenTool className="w-5 h-5" />
             AI Post Gen
@@ -52,68 +64,107 @@ export default function DashboardPage() {
       </header>
 
       {error ? (
-        <div className="p-8 text-pink-400 bg-slate-900 rounded-2xl border border-slate-800">Error: {error}</div>
+        <div role="alert" className="rounded-2xl border border-pink-500/30 bg-pink-50 p-6 text-pink-700 dark:bg-slate-900 dark:text-pink-300">
+          {error}
+        </div>
       ) : !data ? (
-        <div className="p-8 text-slate-400 bg-slate-900 rounded-2xl border border-slate-800 flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-t-transparent border-slate-400 rounded-full animate-spin"></div>
-          Loading dashboard...
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          <div className="w-5 h-5 border-2 border-t-transparent border-slate-400 rounded-full animate-spin" />
+          Lendo estatísticas do vault...
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <section aria-label="Indicadores principais" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             {[
-              { label: 'Total Contacts', value: data.totalContacts },
-              { label: 'Interactions', value: data.totalInteractions },
-              { label: 'Active Leads', value: data.activeLeads },
-              { label: 'Conversion Rate', value: `${data.conversionRate}%` },
-            ].map((stat, i) => (
-              <div key={i} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col relative overflow-hidden group hover:border-slate-700 transition-colors">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-slate-800/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150 duration-500 ease-out"></div>
-                <span className="text-sm font-medium text-slate-400 relative z-10">{stat.label}</span>
-                <span className="text-3xl font-bold text-white mt-2 relative z-10">{stat.value}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 h-[400px] flex flex-col lg:col-span-1">
-              <h2 className="text-lg font-semibold text-white mb-4">Leads by Status</h2>
-              <div className="flex-1 flex items-center justify-center text-slate-500">
-                Chart Placeholder
-              </div>
-            </div>
-            
-            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 h-[400px] flex flex-col lg:col-span-2">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-cyan-400" /> Upcoming Reminders & Actions
-              </h2>
-              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                {data.upcomingReminders.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                    <Calendar className="w-8 h-8 mb-2 opacity-50" />
-                    <p>No pending reminders.</p>
-                  </div>
-                ) : (
-                  data.upcomingReminders.map(rem => (
-                    <div key={rem.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex justify-between items-center group hover:border-pink-500/50 transition-colors">
-                      <div>
-                        <div className="text-sm font-medium text-white flex items-center gap-2">
-                          <span className="text-pink-400">{rem.contact.name}</span>
-                        </div>
-                        <div className="text-slate-400 text-sm mt-1">{rem.message}</div>
-                        <div className="text-xs text-slate-500 mt-2">{new Date(rem.date).toLocaleDateString()}</div>
-                      </div>
-                      <Link href={`/contacts`} className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ArrowRight className="w-4 h-4" />
-                      </Link>
+              { label: 'Posts gerados', value: data.totals.postsGenerated, detail: `${data.totals.postsToday} hoje`, icon: FileText },
+              { label: 'Imagens vinculadas', value: data.totals.imageAssets, detail: `${data.totals.carouselPosts} carrosséis`, icon: Images },
+              { label: 'Vídeos do Studio', value: data.totals.studioVideos, detail: 'rastreados localmente', icon: Film },
+              { label: 'Clientes ativos', value: data.totals.activeClients, detail: `${data.totals.clients} no vault`, icon: Users },
+            ].map((stat) => {
+              const Icon = stat.icon
+              return (
+                <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-6 transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-400">{stat.label}</p>
+                      <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
+                      <p className="text-xs text-slate-500 mt-2">{stat.detail}</p>
                     </div>
+                    <span className="rounded-xl bg-slate-100 p-3 text-cyan-600 dark:bg-slate-800 dark:text-cyan-400">
+                      <Icon className="w-5 h-5" />
+                    </span>
+                  </div>
+                </article>
+              )
+            })}
+          </section>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 lg:col-span-3">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
+                    <Activity className="w-5 h-5 text-cyan-400" />
+                    Posts nos últimos 7 dias
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-1">Baseado na data dos arquivos Markdown.</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Archive className="w-4 h-4" />
+                  {data.totals.archivedPosts} arquivados
+                </div>
+              </div>
+
+              <div className="h-64 flex items-end gap-2 sm:gap-4" role="img" aria-label="Gráfico de posts gerados nos últimos sete dias">
+                {data.postsByDay.map((point) => (
+                  <div key={point.date} className="h-full flex-1 min-w-0 flex flex-col justify-end items-center gap-2 group">
+                    <span className="text-xs font-semibold text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {point.posts}
+                    </span>
+                    <div className="flex h-44 w-full items-end overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-950">
+                      <div
+                        className="w-full min-h-1 bg-gradient-to-t from-cyan-600 to-blue-400 rounded-lg transition-[height] duration-500"
+                        style={{ height: `${Math.max(3, (point.posts / maxDailyPosts) * 100)}%` }}
+                        title={`${point.posts} posts em ${point.date}`}
+                      />
+                    </div>
+                    <span className="text-[11px] text-slate-500 capitalize truncate max-w-full">{point.label}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
+              <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Atividade recente</h2>
+              <p className="text-sm text-slate-500 mb-5">Posts e vídeos registrados.</p>
+              <div className="space-y-3">
+                {data.recentActivity.length === 0 ? (
+                  <p className="py-12 text-center text-slate-500">Nenhuma atividade encontrada.</p>
+                ) : (
+                  data.recentActivity.map((activity) => (
+                    <Link
+                      key={`${activity.kind}-${activity.id}`}
+                      href={activity.kind === 'studio-video' ? '/studio' : '/ai-post-gen'}
+                      className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition-colors hover:border-cyan-500/40 dark:border-slate-800 dark:bg-slate-950"
+                    >
+                      <span className="rounded-lg bg-slate-200 p-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {activity.kind === 'studio-video' ? <Film className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-slate-900 dark:text-white">{activity.theme}</span>
+                        <span className="block text-xs text-slate-500 truncate">
+                          {activity.client} · {new Date(activity.date).toLocaleDateString('pt-BR')}
+                        </span>
+                      </span>
+                      <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                    </Link>
                   ))
                 )}
               </div>
-            </div>
+            </section>
           </div>
         </>
       )}
     </div>
-  );
+  )
 }

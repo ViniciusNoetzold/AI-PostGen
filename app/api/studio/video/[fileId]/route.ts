@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getErrorMessage } from '@/lib/errors';
+import { authorizeRequest } from '@/lib/server/authorization';
+import { safeFileId } from '@/lib/server/security';
 
 // Global cache for video buffers to avoid re-downloading on every range request during scrubbing.
 // In development, Next.js clears modules on reload, so we use globalThis.
-const globalAny = globalThis as any;
-if (!globalAny.videoCache) {
-  globalAny.videoCache = new Map<string, Buffer>();
+const globalVideoCache = globalThis as typeof globalThis & {
+  videoCache?: Map<string, Buffer>;
+};
+if (!globalVideoCache.videoCache) {
+  globalVideoCache.videoCache = new Map<string, Buffer>();
 }
-const videoCache = globalAny.videoCache as Map<string, Buffer>;
+const videoCache = globalVideoCache.videoCache;
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
+  const denied = await authorizeRequest(req, 'viewer');
+  if (denied) return denied;
   try {
-    const { fileId } = await params;
+    const { fileId: rawFileId } = await params;
+    const fileId = safeFileId(rawFileId);
 
     let buffer = videoCache.get(fileId);
     if (!buffer) {
@@ -61,19 +69,19 @@ export async function GET(
       headers.set('Content-Range', `bytes ${start}-${end}/${total}`);
       headers.set('Content-Length', (end - start + 1).toString());
       
-      return new NextResponse(buffer.subarray(start, end + 1) as any, {
+      return new NextResponse(new Uint8Array(buffer.subarray(start, end + 1)), {
         status: 206,
         headers,
       });
     } else {
       headers.set('Content-Length', total.toString());
-      return new NextResponse(buffer as any, {
+      return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers,
       });
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Error streaming video:', e);
-    return new NextResponse(e.message, { status: 500 });
+    return new NextResponse(getErrorMessage(e), { status: 500 });
   }
 }

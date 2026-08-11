@@ -1,18 +1,23 @@
 import { NextResponse } from 'next/server'
+import { authorizeRequest } from '@/lib/server/authorization'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../../utils/config'
+import { getErrorMessage } from '@/lib/errors'
+import { editPostImagesSchema } from '@/lib/schemas/api'
+import { safeResolvePath, validateJsonRequest } from '@/lib/server/security'
+import { atomicWriteText } from '@/lib/server/atomic-files'
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'editor')
+  if (denied) return denied
   try {
-    const { client, id, imageUrls } = await req.json()
-    
-    if (!client || !id || !imageUrls || !Array.isArray(imageUrls)) {
-      return NextResponse.json({ error: 'Missing parameters or invalid imageUrls' }, { status: 400 })
-    }
+    const validated = await validateJsonRequest(req, editPostImagesSchema)
+    if (!validated.ok) return validated.response
+    const { client, id, imageUrls } = validated.data
 
     const VAULT_PATH = getVaultPath()
-    const filePath = path.join(VAULT_PATH, '02-Clientes', client, '04-Posts_Gerados', id)
+    const filePath = safeResolvePath(VAULT_PATH, path.join('02-Clientes', client, '04-Posts_Gerados', id))
     
     const content = await fs.readFile(filePath, 'utf-8')
     const lines = content.split('\n')
@@ -48,13 +53,13 @@ export async function POST(req: Request) {
     
     const newFileContent = lines.join('\n')
     
-    await fs.writeFile(filePath, newFileContent, 'utf-8')
+    await atomicWriteText(filePath, newFileContent)
     
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating images order:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error', details: getErrorMessage(error) },
       { status: 500 }
     )
   }

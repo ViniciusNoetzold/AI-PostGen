@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 type AppState = 'IDLE' | 'GENERATING_ATMOSPHERE' | 'GENERATING_PROMPT' | 'GENERATING_VIDEO' | 'VIDEO_READY';
@@ -70,7 +71,7 @@ export function VideoOutput({ appState, videoUrl, logs }: VideoOutputProps) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 py-6 overflow-hidden">
           <Loader2 className="w-9 h-9 text-gray-400 dark:text-gray-500 animate-spin shrink-0" />
           <div className="font-mono text-sm uppercase tracking-widest text-gray-800 dark:text-gray-100 shrink-0">
-            {appState === 'GENERATING_ATMOSPHERE' ? 'Generating atmosphere' : appState === 'GENERATING_PROMPT' ? 'Writing prompt' : 'Rendering'}
+            {appState === 'GENERATING_ATMOSPHERE' ? 'Gerando atmosfera' : appState === 'GENERATING_PROMPT' ? 'Escrevendo prompt' : 'Renderizando'}
           </div>
           <div className="w-full max-w-md min-h-0 space-y-1.5 font-mono text-[11px] text-left">
             {recentLogs.map((log) => (
@@ -78,9 +79,12 @@ export function VideoOutput({ appState, videoUrl, logs }: VideoOutputProps) {
                 <div className="truncate"><span className="text-gray-400 dark:text-gray-600">›</span> {log.message}</div>
                 {log.image && (
                   // The freshly generated atmosphere image, ticking past in the feed.
-                  <img
+                  <Image
                     src={log.image}
-                    alt="Generated atmosphere"
+                    alt="Atmosfera gerada"
+                    width={208}
+                    height={208}
+                    unoptimized
                     className="mt-2 h-40 md:h-52 w-auto border border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-900"
                   />
                 )}
@@ -90,7 +94,7 @@ export function VideoOutput({ appState, videoUrl, logs }: VideoOutputProps) {
         </div>
       ) : (
         <div className="flex flex-col items-center text-center px-6 w-full max-w-md">
-          <div className="font-mono text-xs uppercase tracking-widest text-gray-500 dark:text-gray-500">Awaiting render</div>
+          <div className="font-mono text-xs uppercase tracking-widest text-gray-500 dark:text-gray-500">Aguardando renderização</div>
           {lastLog?.type === 'error' && (
             <div className="mt-4 w-full flex items-start gap-3 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-left">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-500 dark:text-red-400" />

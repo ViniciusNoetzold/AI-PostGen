@@ -1,7 +1,21 @@
 import { NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import fs from 'fs';
 import path from 'path';
 import { getVaultPath, getGlobalConfig } from '../../../utils/config';
+import { getErrorMessage } from '@/lib/errors';
+import { instagramPublishSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
+
+interface InstagramConfigFile {
+  INSTAGRAM_ACCESS_TOKEN?: string;
+  INSTAGRAM_ACCOUNT_ID?: string;
+}
+
+interface MetaApiResponse {
+  id?: string;
+  error?: { message?: string; code?: number };
+}
 
 // Define o caminho para a pasta principal do vault do cliente
 const getClientVaultPath = async (clientName: string) => {
@@ -33,15 +47,12 @@ const getClientVaultPath = async (clientName: string) => {
 };
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'approver');
+  if (denied) return denied;
   try {
-    const { client, imageUrls, videoUrl, caption, fileName } = await req.json();
-
-    if (!client || (!imageUrls?.length && !videoUrl) || !caption) {
-      return NextResponse.json(
-        { error: 'Cliente, URLs de mídia (imagem ou vídeo) e legenda são obrigatórios' },
-        { status: 400 }
-      );
-    }
+    const validated = await validateJsonRequest(req, instagramPublishSchema);
+    if (!validated.ok) return validated.response;
+    const { client, caption, videoUrl, imageUrls } = validated.data;
 
     const clientPath = await getClientVaultPath(client);
     
@@ -58,7 +69,7 @@ export async function POST(req: Request) {
     let accountId = null;
 
     if (fs.existsSync(configPath)) {
-      const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as InstagramConfigFile;
       accessToken = configData.INSTAGRAM_ACCESS_TOKEN;
       accountId = configData.INSTAGRAM_ACCOUNT_ID;
     }
@@ -92,7 +103,7 @@ export async function POST(req: Request) {
       const createMediaUrl = `https://graph.facebook.com/v19.0/${accountId}/media?media_type=REELS&video_url=${encodeURIComponent(videoUrl)}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
       
       const mediaResponse = await fetch(createMediaUrl, { method: 'POST' });
-      const mediaData = await mediaResponse.json();
+      const mediaData = (await mediaResponse.json()) as MetaApiResponse;
 
       if (mediaData.error) {
         console.error("Erro ao criar video no Instagram:", mediaData.error);
@@ -107,7 +118,7 @@ export async function POST(req: Request) {
       const createMediaUrl = `https://graph.facebook.com/v19.0/${accountId}/media?image_url=${encodeURIComponent(imageUrls[0])}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
       
       const mediaResponse = await fetch(createMediaUrl, { method: 'POST' });
-      const mediaData = await mediaResponse.json();
+      const mediaData = (await mediaResponse.json()) as MetaApiResponse;
 
       if (mediaData.error) {
         console.error("Erro ao criar media no Instagram:", mediaData.error);
@@ -125,7 +136,7 @@ export async function POST(req: Request) {
       for (const url of imageUrls) {
         const createItemUrl = `https://graph.facebook.com/v19.0/${accountId}/media?image_url=${encodeURIComponent(url)}&is_carousel_item=true&access_token=${accessToken}`;
         const itemResponse = await fetch(createItemUrl, { method: 'POST' });
-        const itemData = await itemResponse.json();
+        const itemData = (await itemResponse.json()) as MetaApiResponse;
         
         if (itemData.error) {
           console.error("Erro ao criar item do carrossel:", itemData.error);
@@ -134,13 +145,14 @@ export async function POST(req: Request) {
             { status: 500 }
           );
         }
+        if (!itemData.id) throw new Error('A Meta não retornou o ID do item do carrossel.');
         childrenIds.push(itemData.id);
       }
       
       // 2. Criar container do carrossel pai
       const createCarouselUrl = `https://graph.facebook.com/v19.0/${accountId}/media?media_type=CAROUSEL&children=${encodeURIComponent(childrenIds.join(','))}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
       const carouselResponse = await fetch(createCarouselUrl, { method: 'POST' });
-      const carouselData = await carouselResponse.json();
+      const carouselData = (await carouselResponse.json()) as MetaApiResponse;
       
       if (carouselData.error) {
         console.error("Erro ao criar container do carrossel:", carouselData.error);
@@ -152,10 +164,12 @@ export async function POST(req: Request) {
       creationId = carouselData.id;
     }
 
+    if (!creationId) throw new Error('A Meta não retornou o ID do container de mídia.');
+
     // 3. Publicar o container final (seja único ou carrossel)
     const publishUrl = `https://graph.facebook.com/v19.0/${accountId}/media_publish?creation_id=${creationId}&access_token=${accessToken}`;
     const publishResponse = await fetch(publishUrl, { method: 'POST' });
-    const publishData = await publishResponse.json();
+    const publishData = (await publishResponse.json()) as MetaApiResponse;
 
     if (publishData.error) {
       console.error("Erro ao publicar no Instagram:", publishData.error);
@@ -171,10 +185,10 @@ export async function POST(req: Request) {
       message: 'Post publicado com sucesso no Instagram!' 
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro geral ao publicar no Instagram:', error);
     return NextResponse.json(
-      { error: 'Erro interno ao tentar publicar no Instagram', details: error.message },
+      { error: 'Erro interno ao tentar publicar no Instagram', details: getErrorMessage(error) },
       { status: 500 }
     );
   }

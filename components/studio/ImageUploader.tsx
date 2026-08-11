@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useRef, useState } from 'react';
-import { Plus, X, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { Image as ImageIcon, Plus, X, Loader2 } from 'lucide-react';
 import { SuggestionChip, MediaSelection } from '@/lib/studio/data';
 import { fileToDownscaledDataUrl } from '@/lib/studio/images';
+import { getErrorMessage } from '@/lib/errors';
 
 interface ImageUploaderProps {
   title: string;
@@ -31,12 +33,20 @@ export function ImageUploader({
   const handleChipClick = (suggestion: SuggestionChip) => {
     setPromptText(suggestion.prompt);
     setError(null);
+    if (type === 'product') {
+      onSelect({
+        id: suggestion.id,
+        source: 'suggestion',
+        images: [],
+        description: suggestion.description,
+      });
+    }
   };
 
   const handleGenerate = async () => {
     const prompt = promptText.trim();
     if (!prompt) {
-      setError('Please write or select a prompt first.');
+      setError('Escreva ou selecione uma descrição primeiro.');
       return;
     }
 
@@ -52,7 +62,7 @@ export function ImageUploader({
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to generate image');
+        throw new Error(data.error || 'Não foi possível gerar a imagem');
       }
 
       if (data.image) {
@@ -64,11 +74,11 @@ export function ImageUploader({
           description: data.prompt || prompt,
         });
       } else {
-        throw new Error('Image not returned from backend');
+        throw new Error('A API não retornou uma imagem');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error in image generation:', err);
-      setError(err.message || 'Failed to generate image. Please try again.');
+      setError(getErrorMessage(err, 'Não foi possível gerar a imagem. Tente novamente.'));
     } finally {
       setGenerating(false);
     }
@@ -86,11 +96,11 @@ export function ImageUploader({
         id: `upload-${Date.now()}`,
         source: 'upload',
         images: [dataUrl],
-        description: `Uploaded reference photo`,
+        description: 'Imagem de referência enviada',
       });
       setError(null);
-    } catch (err: any) {
-      setError('Failed to process uploaded file.');
+    } catch {
+      setError('Não foi possível processar o arquivo enviado.');
     } finally {
       if (inputRef.current) inputRef.current.value = '';
     }
@@ -101,7 +111,7 @@ export function ImageUploader({
     setError(null);
   };
 
-  const hasSelection = !!selection && selection.images.length > 0;
+  const hasSelection = !!selection;
 
   return (
     <div className="mb-8 p-5 bg-white dark:bg-[#1e293b] rounded-xl border border-gray-200 dark:border-slate-700 shadow-sm transition-colors duration-300">
@@ -110,41 +120,51 @@ export function ImageUploader({
         {generating && (
           <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 font-mono normal-case">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500 dark:text-blue-400" />
-            Generating...
+            Gerando…
           </span>
         )}
       </h2>
 
       {hasSelection ? (
         <div className="space-y-3">
-          <div className="relative group w-full aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-600">
-            <img
-              src={selection.images[0]}
-              alt={selection.description}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+          <div className="group relative flex min-h-44 w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100 dark:border-slate-600 dark:bg-slate-800">
+            {selection.images[0] ? (
+              <Image
+                src={selection.images[0]}
+                alt={selection.description}
+                fill
+                sizes="(max-width: 1024px) 100vw, 400px"
+                unoptimized
+                className="object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flex max-w-xs flex-col items-center gap-3 px-5 text-center text-gray-500 dark:text-gray-400">
+                <ImageIcon className="size-7 text-blue-500" />
+                <p className="text-sm leading-6">{selection.description}</p>
+              </div>
+            )}
             {!disabled && (
               <button
                 onClick={handleClear}
                 className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors border border-transparent"
-                aria-label="Remove image"
+                aria-label="Remover seleção"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-6">
-              <p className="text-xs font-mono text-zinc-300 line-clamp-2">
-                {selection.description}
-              </p>
-            </div>
+            {selection.images[0] ? (
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-6">
+                <p className="line-clamp-2 font-mono text-xs text-zinc-300">{selection.description}</p>
+              </div>
+            ) : null}
           </div>
           {!disabled && (
             <button
               onClick={handleClear}
               className="w-full py-2 font-mono text-xs uppercase tracking-wider text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-50 dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
             >
-              Reset and Generate New
+              Trocar seleção
             </button>
           )}
         </div>
@@ -158,14 +178,14 @@ export function ImageUploader({
                 setError(null);
               }}
               disabled={disabled || generating}
-              placeholder={`Describe the desired ${type} (e.g. "a colorful ceramic mug on a table"...)`}
+              placeholder={type === 'product' ? 'Descreva o produto desejado…' : 'Descreva a atmosfera desejada…'}
               rows={3}
               className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-gray-200 p-3 font-mono text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent rounded-lg resize-none placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
             />
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-gray-500 dark:text-gray-400">Suggestions</p>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-gray-500 dark:text-gray-400">Sugestões</p>
             <div className="flex flex-wrap gap-1.5">
               {suggestions.map((item) => (
                 <button
@@ -193,11 +213,11 @@ export function ImageUploader({
               {generating ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Generating...
+                  Gerando…
                 </>
               ) : (
                 <>
-                  Generate {type} image
+                  Gerar imagem da atmosfera
                 </>
               )}
             </button>
@@ -205,7 +225,7 @@ export function ImageUploader({
 
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-gray-200 dark:border-slate-700"></div>
-            <span className="flex-shrink mx-3 text-[10px] font-mono uppercase text-gray-400 dark:text-gray-500">or upload own image</span>
+            <span className="mx-3 flex-shrink text-[10px] font-mono uppercase text-gray-400 dark:text-gray-500">ou envie sua imagem</span>
             <div className="flex-grow border-t border-gray-200 dark:border-slate-700"></div>
           </div>
 
@@ -223,6 +243,13 @@ export function ImageUploader({
             }}
             role="button"
             tabIndex={0}
+            aria-disabled={generating}
+            onKeyDown={(event) => {
+              if (!generating && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
             className={`border border-dashed p-4 text-center rounded-lg transition-colors cursor-pointer ${
               dragging
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -232,7 +259,7 @@ export function ImageUploader({
             <div className="flex flex-col items-center justify-center gap-1">
               <Plus className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               <span className="font-mono text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Drop your reference photo or click to browse
+                Arraste uma imagem ou clique para selecionar
               </span>
             </div>
           </div>

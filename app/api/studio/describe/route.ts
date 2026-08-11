@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import { GoogleGenAI } from '@google/genai';
+import { getErrorMessage } from '@/lib/errors';
+import { studioDescribeSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
 
 function getAiClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -11,21 +15,13 @@ function getAiClient() {
   });
 }
 
-type ImageMime =
-  | 'image/png' | 'image/jpeg' | 'image/webp'
-  | 'image/heic' | 'image/heif' | 'image/gif' | 'image/bmp' | 'image/tiff';
-
-interface InlineImage {
-  data: string;
-  mimeType: ImageMime;
-}
-
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'editor');
+  if (denied) return denied;
   try {
-    const { type, images = [] }: { type?: 'product' | 'atmosphere'; images?: InlineImage[] } = await req.json();
-    if (images.length === 0) {
-      return NextResponse.json({ error: 'No images provided' }, { status: 400 });
-    }
+    const validated = await validateJsonRequest(req, studioDescribeSchema, 4_000_000);
+    if (!validated.ok) return validated.response;
+    const { type, images } = validated.data;
     const ai = getAiClient();
 
     const productInstruction = `You write ultra-concise product descriptions for a premium product-film tool.
@@ -57,8 +53,8 @@ Output ONLY the style brief text — no labels, no quotes, no preamble.`;
     });
 
     return NextResponse.json({ description: (response.text || '').trim() });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Error describing image:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }

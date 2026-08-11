@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import { GoogleGenAI } from '@google/genai';
+import { getProviderErrorMessage } from '@/lib/errors';
+import { recordStudioGeneration } from '@/lib/server/studio-metrics';
+import { studioEditVideoSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
 
 export async function POST(req: NextRequest) {
+  const denied = await authorizeRequest(req, 'editor');
+  if (denied) return denied;
   try {
-    const body = await req.json();
-    const { previousInteractionId, instructions } = body as { previousInteractionId?: string; instructions?: string };
-    
-    if (!previousInteractionId || !instructions) {
-      return NextResponse.json({ error: 'previousInteractionId and instructions are required' }, { status: 400 });
-    }
+    const validated = await validateJsonRequest(req, studioEditVideoSchema);
+    if (!validated.ok) return validated.response;
+    const { previousInteractionId, instructions } = validated.data;
 
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY environment variable is missing');
@@ -36,10 +40,14 @@ export async function POST(req: NextRequest) {
 
     const fileIdMatch = interaction.output_video.uri.match(/files\/([a-zA-Z0-9_-]+)/);
     const fileId = fileIdMatch ? fileIdMatch[1] : null;
+    if (!interaction.id || !fileId) throw new Error('Invalid video identifiers returned by Gemini.');
+
+    await recordStudioGeneration({ interactionId: interaction.id, fileId, kind: 'edit' })
+      .catch((metricError: unknown) => console.error('Unable to record Studio metric:', metricError));
 
     return NextResponse.json({ interactionId: interaction.id, uri: interaction.output_video.uri, fileId });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Error editing video:', e);
-    return NextResponse.json({ error: e?.body || e.message }, { status: 500 });
+    return NextResponse.json({ error: getProviderErrorMessage(e) }, { status: 500 });
   }
 }

@@ -1,64 +1,139 @@
-# AI PostGen - Automação Meta & Obsidian
+# AI PostGen
 
-Este é um sistema completo para geração de posts (com imagens e textos longos otimizados para Instagram) gerenciados através de uma base de conhecimento no **Obsidian** e integração direta com as APIs do Facebook/Instagram e modelos de IA (HuggingFace, Gemini, etc.).
+Plataforma full-stack para criação, organização, aprovação, agendamento e publicação de conteúdo. O projeto combina inteligência artificial, CRM, calendário de conteúdo, integrações com Meta e Telegram e uma base de conhecimento compatível com Obsidian.
 
-## 🚀 Como Usar em Outro Computador
+## Tecnologias
 
-Como todo o sistema, incluindo o cofre (vault) do Obsidian e as variáveis de ambiente, estão neste repositório, os passos para iniciar em um novo computador são muito simples:
+- Next.js 16.3 e React 19
+- TypeScript e Tailwind CSS
+- Prisma 7 e PostgreSQL
+- Clerk para autenticação e RBAC
+- Gemini e Hugging Face
+- Meta Graph API e Telegram
+- Vercel Blob para imagens e vídeos
+- Upstash Redis para limites distribuídos
+- Workflow DevKit para filas, aprovação e publicação agendada
+- Vitest e Playwright
+
+## Funcionalidades
+
+- Geração de posts em vários idiomas, com modo aprofundado e carrossel.
+- Vault de posts com busca, filtros, edição, arquivamento, preview e publicação.
+- Product Studio para criação e edição de vídeos de produto.
+- Dashboard com volumetria real do Vault ou PostgreSQL.
+- CRM de pessoas e empresas com fotos, cargos, categorias e relacionamentos.
+- Visualização da rede de clientes com zoom, pan e conexões interativas.
+- Calendário de conteúdo com agendamento, aprovação e workflow durável.
+- Relatórios, configurações centralizadas e status das integrações.
+- APIs protegidas por autenticação, papéis, validação Zod, limites de payload e proteções contra SSRF e path traversal.
+
+## PostgreSQL e Obsidian Vault
+
+O projeto opera atualmente em modo híbrido:
+
+- O **Obsidian Vault** mantém contexto editorial, arquivos Markdown, histórico compatível e informações usadas pelo grafo neural.
+- O **PostgreSQL** armazena dados relacionais e duráveis: usuários, clientes, empresas, posts, mídia, aprovações, filas, métricas e auditoria.
+- O **Object Storage** recebe arquivos de imagem e vídeo em produção.
+
+O PostgreSQL complementa o Vault nesta fase; ele ainda não o substitui completamente.
+
+## Instalação local
 
 ### Pré-requisitos
-- Ter o [Node.js](https://nodejs.org/) instalado.
-- Ter o [PNPM](https://pnpm.io/) instalado (`npm install -g pnpm`).
-- Ter o [Obsidian](https://obsidian.md/) instalado (opcional, para visualizar os arquivos nativamente, mas não obrigatório para a aplicação rodar).
 
-### Passo a Passo
+- Node.js 20 ou superior
+- pnpm
+- PostgreSQL opcional para os recursos duráveis
+- Obsidian opcional para abrir visualmente o Vault
 
-1. **Clone o repositório:**
-   ```bash
-   git clone https://github.com/ViniciusNoetzold/AI-PostGen.git
-   cd AI-PostGen/webapp
-   ```
+### Passos
 
-2. **Instale as dependências:**
-   ```bash
-   pnpm install
-   ```
-
-3. **Inicie o servidor de desenvolvimento:**
-   ```bash
-   pnpm run dev
-   ```
-
-4. **Configuração Inicial na Aplicação:**
-   - Acesse o sistema através do navegador em `http://localhost:3000`.
-   - Clique no **ícone de engrenagem no canto superior direito**.
-   - No modal de Configuração Global, aponte o **Caminho do Vault** para a pasta `Obsidian vault neural brain` que está dentro do repositório (ex: `C:\Seu\Caminho\AI-PostGen\webapp\Obsidian vault neural brain`).
-   - Insira o Token de Acesso da Meta e o ID da Conta (caso não estejam preenchidos) e clique em **Salvar Configurações**.
-
-## 🧠 Estrutura do Vault (Obsidian)
-
-A pasta `Obsidian vault neural brain` contém toda a estrutura de clientes e a base de conhecimento. 
-Sempre que o sistema gerar novos posts ou você criar novos resumos de clientes, eles serão salvos/lidos dessa pasta.
-
-```
-Obsidian vault neural brain/
-├── 02-Clientes/
-│   ├── Nome do Cliente/
-│   │   ├── 04-Posts_Gerados/ (Posts salvos em Markdown)
-│   │   ├── 05-Imagens_Geradas/ (Imagens geradas pela IA)
+```bash
+git clone https://github.com/ViniciusNoetzold/AI-PostGen.git
+cd AI-PostGen
+pnpm install
 ```
 
-## ⚙️ Tecnologias Utilizadas
+Copie o modelo de ambiente e preencha somente no arquivo local:
 
-- **Next.js (App Router)** - Framework React Fullstack.
-- **Hugging Face / Gemini API** - Modelos para criação do texto e imagem.
-- **Meta Graph API** - Para publicação direta de posts únicos e carrosséis no Instagram.
-- **React Force Graph 2D** - Visualização Neural (semelhante ao gráfico do Obsidian) do estado atual do seu Vault.
-- **Recharts** - Painéis de análises estatísticas.
-- **Tailwind CSS** - Estilização moderna.
+```bash
+cp .env.example .env.local
+```
 
-## 🔒 Variáveis de Ambiente e Segurança
-O arquivo `.env` está incluído no repositório (conforme solicitado). **Certifique-se de que o repositório no GitHub esteja configurado como PRIVADO**, já que essas chaves podem permitir acesso indevido se vazarem.
+No PowerShell:
 
-## Contribuição
-Para adicionar novos clientes, basta criar uma nova pasta dentro de `02-Clientes` no vault do Obsidian. O sistema fará a varredura e adaptação de voz automaticamente de acordo com as notas lá descritas.
+```powershell
+Copy-Item .env.example .env.local
+```
+
+As integrações também podem ser configuradas em **Configurações → Integrações do servidor** durante o desenvolvimento local. Segredos preenchidos nessa tela não são devolvidos pela API.
+
+Se utilizar PostgreSQL, aplique as migrações:
+
+```bash
+pnpm db:generate
+pnpm db:deploy
+```
+
+Inicie a aplicação:
+
+```bash
+pnpm dev
+```
+
+Acesse [http://localhost:3000](http://localhost:3000).
+
+## Variáveis de ambiente
+
+O arquivo [.env.example](./.env.example) lista as variáveis suportadas para:
+
+- Clerk
+- PostgreSQL
+- Vercel Blob
+- Upstash Redis
+- Gemini
+- Hugging Face
+- Telegram
+- Meta OAuth
+- criptografia e logs
+
+Nunca versione `.env.local`, tokens, chaves privadas, arquivos de mídia locais ou dados reais do Vault. Em produção, configure os segredos diretamente no provedor de hospedagem.
+
+## Scripts
+
+```bash
+pnpm dev          # desenvolvimento
+pnpm build        # build de produção
+pnpm lint         # ESLint
+pnpm typecheck    # TypeScript
+pnpm test         # testes unitários e de segurança
+pnpm test:e2e     # testes de interface com Playwright
+pnpm db:generate  # gera o Prisma Client
+pnpm db:migrate   # cria migrações no desenvolvimento
+pnpm db:deploy    # aplica migrações existentes
+```
+
+## Estrutura principal
+
+```text
+app/          Páginas e APIs do App Router
+components/   Componentes compartilhados
+lib/          Regras de negócio, segurança e integrações
+prisma/       Schema e migrações PostgreSQL
+workflows/    Filas e workflows duráveis
+tests/        Testes unitários e de segurança
+e2e/          Testes Playwright
+```
+
+## O que ainda falta ser feito
+
+- Provisionar o PostgreSQL de produção, configurar `DATABASE_URL` e executar `pnpm db:deploy`.
+- Importar ou reconciliar os posts existentes no Vault com o PostgreSQL e definir se o Vault permanecerá como espelho/exportação opcional no longo prazo.
+- Provisionar o Clerk, configurar as chaves, validar cadastro/login e definir os papéis `viewer`, `editor`, `approver` e `admin` para os usuários reais.
+- Provisionar Vercel Blob e configurar `BLOB_READ_WRITE_TOKEN` para persistência de imagens e vídeos em produção.
+- Provisionar Upstash Redis para rate limiting distribuído em produção.
+- Criar e revisar o aplicativo Meta, concluir o OAuth com uma conta real, validar renovação de tokens, publicação e analytics.
+- Validar Telegram, Gemini, Hugging Face e os provedores de imagem/vídeo com credenciais e limites de produção.
+- Integrar opcionalmente o Google Calendar como espelho da Agenda de Conteúdo e o Google Tasks para tarefas humanas de revisão.
+- Configurar observabilidade de produção, alertas, retenção de auditoria e monitoramento dos workflows.
+- Executar a suíte E2E completa em um ambiente com PostgreSQL, autenticação, storage e contas externas configuradas.

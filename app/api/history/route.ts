@@ -2,14 +2,19 @@ import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../utils/config'
+import { isNodeError } from '@/lib/errors'
+import type { HistoryPost, StoredHistoryPost } from '@/lib/posts'
+import { authorizeRequest } from '@/lib/server/authorization'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await authorizeRequest(request, 'viewer')
+  if (denied) return denied
   try {
     const VAULT_PATH = getVaultPath()
     const clientsDir = path.join(VAULT_PATH, '02-Clientes')
     const clientFolders = await fs.readdir(clientsDir)
     
-    let allPosts = []
+    const allPosts: StoredHistoryPost[] = []
     
     for (const clientFolder of clientFolders) {
       const clientPath = path.join(clientsDir, clientFolder)
@@ -76,9 +81,9 @@ export async function GET() {
               }
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           // Ignore if 04-Posts_Gerados doesn't exist
-          if (err.code !== 'ENOENT') {
+          if (!isNodeError(err) || err.code !== 'ENOENT') {
             console.error(`Error reading posts for client ${clientFolder}:`, err)
           }
         }
@@ -89,11 +94,17 @@ export async function GET() {
     allPosts.sort((a, b) => b.timestamp - a.timestamp)
     
     // Limit to 20 most recent
-    const recentPosts = allPosts.slice(0, 20).map(p => {
-      // Remove timestamp from response
-      const { timestamp, ...rest } = p
-      return rest
-    })
+    const recentPosts: HistoryPost[] = allPosts.slice(0, 20).map((post) => ({
+      id: post.id,
+      client: post.client,
+      theme: post.theme,
+      mode: post.mode,
+      isCarousel: post.isCarousel,
+      imageUrls: post.imageUrls,
+      imageUrl: post.imageUrl,
+      content: post.content,
+      date: post.date,
+    }))
     
     return NextResponse.json({ history: recentPosts })
   } catch (error) {

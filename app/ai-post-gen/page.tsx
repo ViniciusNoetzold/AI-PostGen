@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useState } from 'react'
+import Image from 'next/image'
 import { 
-  Brain, Bell, UserCircle, Search, Trash2, Edit3, 
-  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight, X, Settings, BarChart2, Sun, Moon, CheckCircle, AlertCircle, Info, UploadCloud, Film, Eye
+  Brain, Bell, Search, Trash2, Edit3,
+  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight, X, BarChart2, CheckCircle, AlertCircle, Info, Film, Eye
 } from 'lucide-react'
 import VaultVisualization from '../components/VaultVisualization'
 import InstagramPreviewModal from '../components/InstagramPreviewModal'
+import type { PublicConfigProfile } from '@/lib/config'
+import { getErrorMessage } from '@/lib/errors'
+import type { HistoryPost } from '@/lib/posts'
+import { useDarkMode } from '@/components/ThemeToggle'
+import { useUserProfile } from '@/lib/user-profile'
 
 interface Notification {
   id: string;
@@ -17,13 +22,27 @@ interface Notification {
   read: boolean;
 }
 
-interface UserProfile {
-  name: string;
-  role: string;
-  avatarUrl: string;
+function readUsageCount(): number {
+  if (typeof window === 'undefined') return 0
+  const today = new Date().toDateString()
+  if (localStorage.getItem('usageDate') !== today) return 0
+  const count = Number.parseInt(localStorage.getItem('usageCount') ?? '0', 10)
+  return Number.isFinite(count) ? count : 0
+}
+
+function readTimeLeft(): string {
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setHours(24, 0, 0, 0)
+  const diff = tomorrow.getTime() - now.getTime()
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  return `${hours}h ${minutes}m`
 }
 
 export default function Home() {
+  const darkMode = useDarkMode()
+  const profile = useUserProfile()
   const [theme, setTheme] = useState('')
   const [highMode, setHighMode] = useState(false)
   const [isCarousel, setIsCarousel] = useState(false)
@@ -37,11 +56,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   
   // History state
-  const [history, setHistory] = useState<any[]>([])
+  const [history, setHistory] = useState<HistoryPost[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [publishing, setPublishing] = useState<Record<string, boolean>>({})
   const [generatingVideo, setGeneratingVideo] = useState<Record<string, boolean>>({})
   const [generatingImage, setGeneratingImage] = useState<Record<string, boolean>>({})
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   
   // Pagination & Search
   const [currentPage, setCurrentPage] = useState(1)
@@ -50,11 +70,10 @@ export default function Home() {
   const itemsPerPage = 5
   
   // Rate limiting states
-  const [usageCount, setUsageCount] = useState(0)
-  const [timeLeft, setTimeLeft] = useState('')
+  const [usageCount, setUsageCount] = useState(readUsageCount)
+  const [timeLeft, setTimeLeft] = useState(readTimeLeft)
   const MAX_LIMIT = 20
   const [showStats, setShowStats] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
 
   // Notifications
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -75,69 +94,21 @@ export default function Home() {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
   }
 
-  // Profile
-  const [profile, setProfile] = useState<UserProfile>({
-    name: 'Admin',
-    role: 'Creator',
-    avatarUrl: 'https://i.pravatar.cc/150?u=aipostgen'
-  })
-  const [profileModalOpen, setProfileModalOpen] = useState(false)
-
-  useEffect(() => {
-    const storedProfile = localStorage.getItem('userProfile')
-    if (storedProfile) {
-      try {
-        setProfile(JSON.parse(storedProfile))
-      } catch (e) {}
-    }
-  }, [])
-
-  const saveProfile = (e: React.FormEvent) => {
-    e.preventDefault()
-    localStorage.setItem('userProfile', JSON.stringify(profile))
-    setProfileModalOpen(false)
-    addNotification('success', 'Perfil atualizado com sucesso!')
-  }
-
-  // Initialize dark mode from localStorage
-  useEffect(() => {
-    const isDark = localStorage.getItem('darkMode') === 'true'
-    setDarkMode(isDark)
-    if (isDark) document.documentElement.classList.add('dark')
-  }, [])
-
-  const toggleDarkMode = () => {
-    const newDark = !darkMode
-    setDarkMode(newDark)
-    localStorage.setItem('darkMode', String(newDark))
-    if (newDark) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }
-
   // New UI states
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set())
   
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false)
-  const [editingPost, setEditingPost] = useState<any>(null)
+  const [editingPost, setEditingPost] = useState<HistoryPost | null>(null)
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   
-  // Config Modal State
-  const [configModalOpen, setConfigModalOpen] = useState(false)
-  const [vaultPath, setVaultPath] = useState('')
-  const [instagramToken, setInstagramToken] = useState('')
-  const [instagramAccountId, setInstagramAccountId] = useState('')
   const [defaultLanguage, setDefaultLanguage] = useState('pt-BR')
-  const [savingConfig, setSavingConfig] = useState(false)
 
   // Preview Modal State
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
-  const [previewPost, setPreviewPost] = useState<any>(null)
+  const [previewPost, setPreviewPost] = useState<HistoryPost | null>(null)
 
   // Language selector (per-generation, defaults to config)
   const [selectedLanguage, setSelectedLanguage] = useState('pt-BR')
@@ -157,44 +128,12 @@ export default function Home() {
     { code: 'ar-SA', label: '🇸🇦 العربية' },
   ]
 
-  useEffect(() => {
-    const storedDate = localStorage.getItem('usageDate')
-    const today = new Date().toDateString()
-    
-    if (storedDate !== today) {
-      localStorage.setItem('usageDate', today)
-      localStorage.setItem('usageCount', '0')
-      setUsageCount(0)
-    } else {
-      const count = parseInt(localStorage.getItem('usageCount') || '0', 10)
-      setUsageCount(count)
-    }
-
-    const updateTimer = () => {
-      const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setHours(24, 0, 0, 0)
-      const diff = tomorrow.getTime() - now.getTime()
-      
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      setTimeLeft(`${hours}h ${minutes}m`)
-    }
-    
-    updateTimer()
-    const interval = setInterval(updateTimer, 60000)
-    fetchHistory()
-    fetchConfig()
-    
-    return () => clearInterval(interval)
-  }, [])
-  
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setLoadingHistory(true)
     try {
       const res = await fetch('/api/history')
       if (res.ok) {
-        const data = await res.json()
+        const data = (await res.json()) as { history?: HistoryPost[] }
         setHistory(data.history || [])
         setCurrentPage(1) // reset page on load
       }
@@ -203,16 +142,13 @@ export default function Home() {
     } finally {
       setLoadingHistory(false)
     }
-  }
+  }, [])
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch('/api/config')
       if (res.ok) {
-        const data = await res.json()
-        if (data.vaultPath) setVaultPath(data.vaultPath)
-        if (data.instagramToken) setInstagramToken(data.instagramToken)
-        if (data.instagramAccountId) setInstagramAccountId(data.instagramAccountId)
+        const data = (await res.json()) as PublicConfigProfile
         if (data.defaultLanguage) {
           setDefaultLanguage(data.defaultLanguage)
           setSelectedLanguage(data.defaultLanguage) // Sync the per-generation selector
@@ -221,9 +157,25 @@ export default function Home() {
     } catch (err) {
       console.error('Error fetching config:', err)
     }
-  }
+  }, [])
 
-    const handleSelectPost = (id: string) => {
+  useEffect(() => {
+    const today = new Date().toDateString()
+    if (localStorage.getItem('usageDate') !== today) {
+      localStorage.setItem('usageDate', today)
+      localStorage.setItem('usageCount', '0')
+    }
+
+    const interval = setInterval(() => setTimeLeft(readTimeLeft()), 60000)
+    queueMicrotask(() => {
+      void fetchHistory()
+      void fetchConfig()
+    })
+
+    return () => clearInterval(interval)
+  }, [fetchConfig, fetchHistory])
+
+  const handleSelectPost = (id: string) => {
     setSelectedPosts(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -256,7 +208,7 @@ export default function Home() {
       } else {
         addNotification('error', 'Nenhum post foi excluído.');
       }
-    } catch (e) {
+    } catch {
       addNotification('error', 'Erro ao realizar exclusão em massa.');
     }
   }
@@ -277,11 +229,7 @@ export default function Home() {
     }
   }
 
-  const handleArchive = async (client: string, id: string) => {
-    addNotification('info', 'Função de arquivamento em desenvolvimento.')
-  }
-  
-  const handleEdit = (post: any) => {
+  const handleEdit = (post: HistoryPost) => {
     setEditingPost(post)
     setEditContent(post.content)
     setEditModalOpen(true)
@@ -302,7 +250,7 @@ export default function Home() {
       } else {
         addNotification('error', 'Erro ao salvar edição.')
       }
-    } catch (e) {
+    } catch {
       addNotification('error', 'Erro de conexão ao salvar edição.')
     } finally {
       setSavingEdit(false)
@@ -324,12 +272,12 @@ export default function Home() {
       } else {
         addNotification('error', 'Erro ao salvar a ordem das imagens.')
       }
-    } catch (e) {
+    } catch {
       addNotification('error', 'Erro de conexão ao salvar imagens.')
     }
   }
 
-  const handlePublishToInstagram = async (post: any) => {
+  const handlePublishToInstagram = async (post: HistoryPost) => {
     if (!post.imageUrl && (!post.imageUrls || post.imageUrls.length === 0)) {
       addNotification('error', 'Este post não tem uma imagem válida para o Instagram.')
       return
@@ -367,7 +315,7 @@ export default function Home() {
     }
   }
 
-  const handleGenerateImage = async (post: any) => {
+  const handleGenerateImage = async (post: HistoryPost) => {
     setGeneratingImage(prev => ({ ...prev, [post.id]: true }))
     addNotification('info', 'Gerando imagem para o post...')
 
@@ -393,7 +341,7 @@ export default function Home() {
     }
   }
 
-  const handleGenerateVideo = async (post: any) => {
+  const handleGenerateVideo = async (post: HistoryPost) => {
     const imageUrl = post.imageUrls && post.imageUrls.length > 0 ? post.imageUrls[0] : post.imageUrl;
     if (!imageUrl) {
       addNotification('error', 'Este post não tem uma imagem para gerar vídeo.');
@@ -488,39 +436,11 @@ export default function Home() {
         }
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      addNotification('error', err.message || 'Erro ao gerar ou publicar vídeo.');
+      addNotification('error', getErrorMessage(err, 'Erro ao gerar ou publicar vídeo.'));
     } finally {
       setGeneratingVideo(prev => ({ ...prev, [post.id]: false }));
-    }
-  }
-
-  const saveConfig = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSavingConfig(true)
-    try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          vaultPath: vaultPath, 
-          instagramToken: instagramToken, 
-          instagramAccountId: instagramAccountId,
-          defaultLanguage: defaultLanguage,
-        })
-      })
-      const data = await res.json()
-      if (res.ok) {
-        addNotification('success', 'Configurações globais salvas com sucesso!')
-        setConfigModalOpen(false)
-      } else {
-        addNotification('error', 'Erro ao salvar configurações: ' + data.error)
-      }
-    } catch (err) {
-      addNotification('error', 'Erro de conexão ao salvar configuração.')
-    } finally {
-      setSavingConfig(false)
     }
   }
 
@@ -601,43 +521,27 @@ export default function Home() {
   })
   const totalPages = Math.max(1, Math.ceil(filteredHistory.length / itemsPerPage))
   const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const generatedPost = generatedPostId
+    ? history.find((post) => post.id === generatedPostId)
+    : undefined
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] flex flex-col font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300">
+    <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-800 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-200">
       
       {/* Navbar */}
-      <header className="bg-[#2a3645] dark:bg-[#1e293b] text-white py-3 px-8 flex justify-between items-center shadow-md z-10 sticky top-0 transition-colors duration-300">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Brain className="w-6 h-6 text-pink-400" />
-            <span className="font-semibold text-xl tracking-tight">AI-PostGen</span>
-          </div>
-          <Link href="/studio" className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg transition-colors border border-indigo-500/30 text-sm font-medium">
-            <Film className="w-4 h-4" />
-            Product Studio
-          </Link>
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-white">AI Post Gen</h1>
+          <p className="hidden text-xs text-slate-500 sm:block">Criação e gestão de conteúdo</p>
         </div>
-        <div className="flex items-center gap-5">
-          <button 
-            onClick={toggleDarkMode}
-            className="relative p-1 hover:bg-slate-700 rounded-full transition-colors"
-            title={darkMode ? "Ativar Modo Claro" : "Ativar Modo Escuro"}
-          >
-            {darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-200" />}
-          </button>
-          <button 
-            onClick={() => setConfigModalOpen(true)}
-            className="relative p-1 hover:bg-slate-700 rounded-full transition-colors"
-            title="Configurações Globais"
-          >
-            <Settings className="w-5 h-5 text-gray-300" />
-          </button>
-          <div className="relative flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative flex items-center gap-2 sm:gap-3">
             <button 
               onClick={() => { setShowNotifications(!showNotifications); if (!showNotifications) markAllRead(); }}
-              className="relative p-1 hover:bg-slate-700 rounded-full transition-colors"
+              className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              aria-label="Abrir notificações"
             >
-              <Bell className="w-5 h-5 text-gray-300" />
+              <Bell className="size-5" />
               {unreadCount > 0 && (
                 <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 text-white text-[8px] font-bold flex items-center justify-center rounded-full border border-[#2a3645]">
                   {unreadCount > 9 ? '9+' : unreadCount}
@@ -680,26 +584,19 @@ export default function Home() {
               </div>
             )}
           
-          <button 
-            onClick={() => setProfileModalOpen(true)}
-            className="w-8 h-8 rounded-full bg-slate-300 overflow-hidden border border-slate-600 hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer flex-shrink-0 ml-1 block z-20 relative"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={profile.avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
-          </button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-[1400px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-8">
+      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-6 p-4 sm:p-6 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
         
         {/* Left Column - Form */}
         <section className="flex flex-col gap-6">
-          {/* Wood Corkboard Style Container */}
-          <div className="bg-[#a87c51] dark:bg-[#5c4028] p-3 rounded-[20px] shadow-xl relative overflow-hidden transition-colors duration-300">
+          {/* Generation form */}
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
             {/* Inner White Paper */}
-            <div className="bg-white dark:bg-[#1e293b] rounded-xl p-6 shadow-inner relative flex flex-col gap-6 h-full border border-[#f0eade] dark:border-slate-700 transition-colors duration-300">
+            <div className="relative flex h-full flex-col gap-6 bg-transparent p-5 transition-colors sm:p-6">
               
               {/* Progress Indicator */}
               <div className="flex items-center gap-6 pb-6 border-b border-gray-100 dark:border-slate-700">
@@ -724,14 +621,14 @@ export default function Home() {
                 </div>
                 
                 <div className="flex flex-col justify-center w-full">
-                  <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base mb-2">Posts Gerados Hoje</h3>
+                  <h3 className="mb-2 text-base font-bold text-gray-800 dark:text-gray-100">Uso diário neste navegador</h3>
                   <div className="w-full bg-gray-100 dark:bg-slate-700 rounded-full h-2 mb-2">
                     <div 
                       className={`h-2 rounded-full ${usageCount >= MAX_LIMIT ? 'bg-red-500' : 'bg-slate-300'}`} 
                       style={{ width: `${Math.min((usageCount / MAX_LIMIT) * 100, 100)}%` }}
                     ></div>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">O limite reinicia em {timeLeft}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">O limite local reinicia em {timeLeft}</p>
                 </div>
               </div>
 
@@ -907,12 +804,12 @@ export default function Home() {
                 {result}
               </div>
 
-              {generatedPostId && history.find(p => p.id === generatedPostId) && (
+              {generatedPostId && generatedPost && (
                 <div className="pt-4 border-t border-gray-100 dark:border-slate-700">
                   <h3 className="text-xs font-bold text-gray-800 dark:text-gray-200 mb-3">Ações Rápidas para este Post:</h3>
                   <div className="flex flex-wrap gap-2">
                     <button 
-                      onClick={() => handleGenerateImage(history.find(p => p.id === generatedPostId))}
+                      onClick={() => handleGenerateImage(generatedPost)}
                       disabled={generatingImage[generatedPostId]}
                       className="flex items-center gap-2 px-3 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors text-xs font-medium"
                     >
@@ -925,7 +822,7 @@ export default function Home() {
                     </button>
                     
                     <button 
-                      onClick={() => handleGenerateVideo(history.find(p => p.id === generatedPostId))}
+                      onClick={() => handleGenerateVideo(generatedPost)}
                       disabled={generatingVideo[generatedPostId]}
                       className="flex items-center gap-2 px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors text-xs font-medium"
                     >
@@ -938,7 +835,7 @@ export default function Home() {
                     </button>
                     
                     <button 
-                      onClick={() => handlePublishToInstagram(history.find(p => p.id === generatedPostId))}
+                      onClick={() => handlePublishToInstagram(generatedPost)}
                       disabled={publishing[generatedPostId]}
                       className="flex items-center gap-2 px-3 py-2 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-lg hover:bg-pink-200 dark:hover:bg-pink-900/50 transition-colors text-xs font-medium"
                     >
@@ -1064,9 +961,16 @@ export default function Home() {
                         </div>
                       {/* Image Side */}
                       <div className="w-full sm:w-48 h-48 sm:h-full flex-shrink-0 bg-gray-100 dark:bg-slate-700 relative">
-                        {coverImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={coverImage} alt={post.theme} className="w-full h-full object-cover" />
+                        {coverImage && !failedImages[post.id] ? (
+                          <Image
+                            src={coverImage}
+                            alt={post.theme}
+                            fill
+                            sizes="(max-width: 640px) 100vw, 192px"
+                            unoptimized
+                            className="object-cover"
+                            onError={() => setFailedImages((current) => ({ ...current, [post.id]: true }))}
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100 dark:bg-slate-700">
                             <ImageIcon className="w-8 h-8 opacity-50" />
@@ -1083,7 +987,7 @@ export default function Home() {
                       <div className="flex-1 p-4 flex flex-col min-w-0">
                         
                         {/* Top row: Title and Actions */}
-                        <div className="flex justify-between items-start gap-4 mb-1">
+                        <div className="mb-1 flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
                           <div className="min-w-0 flex-1">
                             <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg truncate" title={post.theme}>
                               {post.theme}
@@ -1094,7 +998,7 @@ export default function Home() {
                           </div>
                           
                           {/* Actions */}
-                          <div className="flex gap-2 flex-shrink-0">
+                          <div className="flex flex-shrink-0 flex-wrap gap-2">
                             <button 
                               onClick={() => handlePublishToInstagram(post)}
                               disabled={publishing[post.id]}
@@ -1244,92 +1148,10 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto py-6 px-8 border-t border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-500 dark:text-gray-400 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex gap-6">
-          <a href="#" className="hover:text-gray-800 dark:text-gray-100">Sobre nós</a>
-          <a href="#" className="hover:text-gray-800 dark:text-gray-100">Termos de Serviço</a>
-          <a href="#" className="hover:text-gray-800 dark:text-gray-100">Suporte</a>
-        </div>
-        <div>
-          Powered by <span className="font-semibold text-gray-700 dark:text-gray-200">AI-PostGen</span>
-        </div>
+      <footer className="mt-auto flex flex-col items-center justify-between gap-2 border-t border-gray-200 bg-white px-6 py-5 text-xs text-gray-500 dark:border-slate-800 dark:bg-slate-900 dark:text-gray-400 sm:flex-row">
+        <p>Workspace local conectado ao Obsidian Vault.</p>
+        <p><span className="font-semibold text-gray-700 dark:text-gray-200">AI Post Gen</span> · Conteúdo e mídia em um só fluxo</p>
       </footer>
-
-      
-      {/* Profile Modal */}
-      {profileModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-slate-700">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Meu Perfil</h2>
-              <button onClick={() => setProfileModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-300">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <form onSubmit={saveProfile}>
-              <div className="p-6 flex flex-col gap-4">
-                
-                <div className="flex justify-center mb-2">
-                  <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gray-100 dark:border-slate-700 relative group cursor-pointer bg-slate-200">
-                    <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <UploadCloud className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">URL da Foto</label>
-                  <input
-                    type="text"
-                    required
-                    value={profile.avatarUrl}
-                    onChange={(e) => setProfile({...profile, avatarUrl: e.target.value})}
-                    className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 text-sm bg-transparent dark:text-gray-100"
-                    placeholder="https://..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">Nome</label>
-                  <input
-                    type="text"
-                    required
-                    value={profile.name}
-                    onChange={(e) => setProfile({...profile, name: e.target.value})}
-                    className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 text-sm bg-transparent dark:text-gray-100"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">Cargo / Role</label>
-                  <input
-                    type="text"
-                    value={profile.role}
-                    onChange={(e) => setProfile({...profile, role: e.target.value})}
-                    className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 text-sm bg-transparent dark:text-gray-100"
-                  />
-                </div>
-              </div>
-              <div className="p-6 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setProfileModalOpen(false)}
-                  className="px-5 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-slate-800/80 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  Salvar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Edit Modal */}
       {editModalOpen && (
@@ -1363,116 +1185,6 @@ export default function Home() {
                 {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Config Modal */}
-      {configModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg">
-            <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-slate-700">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Configurações Globais</h2>
-              <button onClick={() => setConfigModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:text-gray-300">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <form onSubmit={saveConfig}>
-              <div className="p-6 flex flex-col gap-4 overflow-y-auto max-h-[60vh]">
-                
-                {/* Vault Section */}
-                <div className="mb-2">
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2 border-b pb-1">Banco de Dados (Cofre)</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Caminho absoluto para a pasta principal do cofre no seu computador. (ex: E:\\Caminho\\Para\\Cofre)
-                  </p>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">Caminho do Cofre</label>
-                    <input
-                      type="text"
-                      required
-                      value={vaultPath}
-                      onChange={(e) => setVaultPath(e.target.value)}
-                      className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
-                      placeholder="C:\Users\User\Documents\Obsidian Vault"
-                    />
-                  </div>
-                </div>
-
-                {/* Idioma Padrão */}
-                <div>
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2 border-b pb-1">🌐 Idioma Padrão dos Posts</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Idioma padrão para geração de conteúdo. Pode ser alterado pontualmente no formulário principal.
-                  </p>
-                  <div className="relative">
-                    <select
-                      value={defaultLanguage}
-                      onChange={(e) => {
-                        setDefaultLanguage(e.target.value)
-                        setSelectedLanguage(e.target.value)
-                      }}
-                      className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 text-sm appearance-none cursor-pointer"
-                    >
-                      {LANGUAGES.map((lang) => (
-                        <option key={lang.code} value={lang.code}>
-                          {lang.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Instagram Section */}
-                <div>
-                  <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2 border-b pb-1">Instagram</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Credenciais globais da API do Instagram (Graph API) para publicar automaticamente.
-                  </p>
-                  <div className="mb-3">
-                    <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">Access Token</label>
-                    <input
-                      type="text"
-                      value={instagramToken}
-                      onChange={(e) => setInstagramToken(e.target.value)}
-                      className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
-                      placeholder="EAA..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-800 dark:text-gray-100 mb-1">Account ID</label>
-                    <input
-                      type="text"
-                      value={instagramAccountId}
-                      onChange={(e) => setInstagramAccountId(e.target.value)}
-                      className="w-full p-3 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-400 font-mono text-sm"
-                      placeholder="178414..."
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setConfigModalOpen(false)}
-                  className="px-5 py-2 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-50 dark:bg-slate-800/80 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  disabled={savingConfig}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {savingConfig ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

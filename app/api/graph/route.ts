@@ -2,17 +2,34 @@ import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../utils/config'
+import { authorizeRequest } from '@/lib/server/authorization'
 
-export async function GET() {
+interface VaultGraphNode {
+  id: string
+  name: string
+  group: 'root' | 'folder' | 'file'
+  val: number
+  links?: string[]
+}
+
+interface VaultGraphLink {
+  source: string
+  target: string
+  type: 'hierarchy' | 'reference'
+}
+
+export async function GET(request: Request) {
+  const denied = await authorizeRequest(request, 'viewer')
+  if (denied) return denied
   try {
     const VAULT_PATH = await getVaultPath();
-    const nodes: any[] = []
-    const links: any[] = []
+    const nodes: VaultGraphNode[] = []
+    const links: VaultGraphLink[] = []
     
     // Nodes maps id to its node object
-    const nodeMap = new Map<string, any>()
+    const nodeMap = new Map<string, VaultGraphNode>()
     
-    const rootNode = { id: 'Vault', name: 'Neural Brain Vault', group: 'root', val: 5 }
+    const rootNode: VaultGraphNode = { id: 'Vault', name: 'Neural Brain Vault', group: 'root', val: 5 }
     nodes.push(rootNode)
     nodeMap.set('Vault', rootNode)
 
@@ -26,7 +43,7 @@ export async function GET() {
         const id = fullPath.replace(VAULT_PATH, '').replace(/^[\\\/]/, '')
         const isDir = entry.isDirectory()
         
-        const node: any = {
+        const node: VaultGraphNode = {
           id: id,
           name: entry.name.replace(/\.md$/, ''),
           group: isDir ? 'folder' : 'file',
@@ -85,8 +102,8 @@ export async function GET() {
     }
     
     // Generate some stats for charts
-    let postsPerClient: Record<string, number> = {}
-    let themes: Record<string, number> = {}
+    const postsPerClient: Record<string, number> = {}
+    const themes: Record<string, number> = {}
     
     try {
       const clientsDir = path.join(VAULT_PATH, '02-Clientes')
@@ -115,10 +132,10 @@ export async function GET() {
                 }
               }
             }
-          } catch(e) {}
+          } catch {}
         }
       }
-    } catch(e) {}
+    } catch {}
 
     const stats = {
       postsPerClient: Object.keys(postsPerClient).map(k => ({ name: k, value: postsPerClient[k] })),

@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import fs from 'fs';
 import path from 'path';
 import { getVaultPath } from '../../../utils/config';
+import { getErrorMessage } from '@/lib/errors';
+import { instagramConfigSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
+import { atomicWriteText } from '@/lib/server/atomic-files';
 
 // Define o caminho para a pasta principal do vault do cliente
 const getClientVaultPath = async (clientName: string) => {
@@ -27,15 +32,12 @@ const getClientVaultPath = async (clientName: string) => {
 };
 
 export async function POST(req: Request) {
+  const denied = await authorizeRequest(req, 'admin');
+  if (denied) return denied;
   try {
-    const { client, accessToken, accountId } = await req.json();
-
-    if (!client || !accessToken || !accountId) {
-      return NextResponse.json(
-        { error: 'Cliente, Token de Acesso e ID da Conta são obrigatórios' },
-        { status: 400 }
-      );
-    }
+    const validated = await validateJsonRequest(req, instagramConfigSchema);
+    if (!validated.ok) return validated.response;
+    const { client, accessToken, accountId } = validated.data;
 
     const clientPath = await getClientVaultPath(client);
     
@@ -53,17 +55,17 @@ export async function POST(req: Request) {
       INSTAGRAM_ACCOUNT_ID: accountId
     };
 
-    fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), 'utf-8');
+    await atomicWriteText(configPath, JSON.stringify(configData, null, 2));
 
     return NextResponse.json({ 
       success: true, 
       message: 'Configuração do Instagram salva com sucesso!' 
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro geral ao salvar configuração do Instagram:', error);
     return NextResponse.json(
-      { error: 'Erro interno ao salvar configuração', details: error.message },
+      { error: 'Erro interno ao salvar configuração', details: getErrorMessage(error) },
       { status: 500 }
     );
   }

@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useRef } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
-import { Loader2, ArrowRight, ChevronRight, Download, Brain, ArrowLeft, Sun, Moon } from 'lucide-react';
+import { Loader2, ArrowRight, ChevronRight, Download, Sparkles } from 'lucide-react';
 import { PRODUCTS, ATMOSPHERES, MediaSelection } from '@/lib/studio/data';
 import { ImageUploader } from '@/components/studio/ImageUploader';
 import { VideoOutput } from '@/components/studio/VideoOutput';
 import { ScrollRow } from '@/components/studio/ScrollRow';
 import { toInlineImages, InlineImage } from '@/lib/studio/images';
+import { getErrorMessage } from '@/lib/errors';
 
 type LogType = 'info' | 'success' | 'warn' | 'error';
 type AppState = 'IDLE' | 'GENERATING_ATMOSPHERE' | 'GENERATING_PROMPT' | 'GENERATING_VIDEO' | 'VIDEO_READY';
@@ -21,25 +22,6 @@ interface VideoVersion {
 }
 
 export default function StudioPage() {
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    const isDark = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(isDark);
-    if (isDark) document.documentElement.classList.add('dark');
-  }, []);
-
-  const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', String(newDarkMode));
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
   const [product, setProduct] = useState<MediaSelection | null>(null);
   const [atmosphere, setAtmosphere] = useState<MediaSelection | null>(null);
   const [appState, setAppState] = useState<AppState>('IDLE');
@@ -48,7 +30,6 @@ export default function StudioPage() {
   // "Generate your own atmosphere": a setting the user types instead of picking
   // or uploading an atmosphere image. On submit it's expanded by Flash Lite and
   // rendered by gemini-3.1-flash-lite-image, then fed into the video pipeline as the reference.
-  const [generateOpen, setGenerateOpen] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState('');
 
   const [versions, setVersions] = useState<VideoVersion[]>([]);
@@ -72,7 +53,7 @@ export default function StudioPage() {
     }]);
   };
 
-  const describe = (sel: MediaSelection) => sel.description || `${sel.images.length} uploaded image${sel.images.length > 1 ? 's' : ''}`;
+  const describe = (sel: MediaSelection) => sel.description || `${sel.images.length} ${sel.images.length === 1 ? 'imagem enviada' : 'imagens enviadas'}`;
 
   // Typing a setting is an alternative to picking/uploading an atmosphere image.
   const usingGenerate = !atmosphere && generatePrompt.trim().length > 0;
@@ -84,7 +65,6 @@ export default function StudioPage() {
   const selectAtmosphere: React.Dispatch<React.SetStateAction<MediaSelection | null>> = (value) => {
     setAtmosphere(value);
     if (typeof value !== 'function' && value) {
-      setGenerateOpen(false);
       setGeneratePrompt('');
     }
   };
@@ -94,13 +74,13 @@ export default function StudioPage() {
 
   // Explains why the submit button is unavailable (shown as a tooltip).
   const submitHint = isGenerating
-    ? 'Generating your video — please wait'
+    ? 'Seu vídeo está sendo gerado — aguarde'
     : !product && !hasAtmosphere
-    ? 'Add a product image and an atmosphere to start'
+    ? 'Adicione um produto e uma atmosfera para começar'
     : !product
-    ? 'Add a product image to start'
+    ? 'Adicione um produto para começar'
     : !hasAtmosphere
-    ? 'Add an atmosphere to start'
+    ? 'Adicione uma atmosfera para começar'
     : undefined;
 
   const selected = versions.find(v => v.label === selectedLabel) ?? null;
@@ -114,7 +94,7 @@ export default function StudioPage() {
 
   // Polls Omni until the render is ACTIVE, then records the version.
   const pollVideoStatus = (fileId: string, interactionId: string, promptText: string, isInitial: boolean) => {
-    addLog('Polling Omni for render status...', 'warn');
+    addLog('Consultando o status da renderização…', 'warn');
     let lastState = '';
 
     const interval = setInterval(async () => {
@@ -124,26 +104,25 @@ export default function StudioPage() {
 
         if (data.state === 'ACTIVE') {
           clearInterval(interval);
-          addLog('Render complete. Stream ready.', 'success');
+          addLog('Renderização concluída. Vídeo pronto.', 'success');
           addVersion(interactionId, fileId, promptText);
           setAppState('VIDEO_READY');
           if (isInitial) {
             // Reset the upload sidebar for the next run.
             setProduct(null);
             setAtmosphere(null);
-            setGenerateOpen(false);
             setGeneratePrompt('');
           }
         } else if (data.state === 'FAILED') {
           clearInterval(interval);
-          addLog('Omni backend reported FAILED state.', 'error');
+          addLog('O provedor informou falha na renderização.', 'error');
           setAppState(isInitial ? 'IDLE' : 'VIDEO_READY');
         } else if (data.state !== lastState) {
           lastState = data.state;
-          addLog(`Render status: ${data.state}`);
+          addLog(`Status da renderização: ${data.state}`);
         }
-      } catch (e: any) {
-        addLog(`Polling error: ${e.message}`, 'error');
+      } catch (e: unknown) {
+        addLog(`Erro ao consultar o status: ${getErrorMessage(e)}`, 'error');
       }
     }, 5000);
   };
@@ -152,7 +131,7 @@ export default function StudioPage() {
   // first, then write the prompt and render V1.
   const handleSubmit = async () => {
     if (!product || !hasAtmosphere) {
-      addLog('Please add a product and an atmosphere.', 'error');
+      addLog('Adicione um produto e uma atmosfera.', 'error');
       return;
     }
     const settingInput = generatePrompt.trim();
@@ -175,9 +154,9 @@ export default function StudioPage() {
       if (usingGenerate) {
         // Stage 0: Flash Lite writes an image prompt; gemini-3.1-flash-lite-image renders it.
         setAppState('GENERATING_ATMOSPHERE');
-        addLog(`Generating atmosphere from: "${settingInput}"`, 'info');
-        addLog('Writing image prompt (Gemini Flash Lite)…', 'warn');
-        addLog('Rendering atmosphere with gemini-3.1-flash-lite-image…', 'warn');
+        addLog(`Gerando atmosfera a partir de: "${settingInput}"`, 'info');
+        addLog('Preparando o prompt da imagem…', 'warn');
+        addLog('Renderizando a atmosfera…', 'warn');
 
         const atmoRes = await fetch('/api/studio/generate-atmosphere', {
           method: 'POST',
@@ -185,19 +164,19 @@ export default function StudioPage() {
           body: JSON.stringify({ input: settingInput })
         });
         const atmoData = await atmoRes.json();
-        if (!atmoRes.ok) throw new Error(atmoData.error || 'Failed to generate atmosphere');
+        if (!atmoRes.ok) throw new Error(atmoData.error || 'Não foi possível gerar a atmosfera');
 
         const atmoDataUrl = `data:${atmoData.image.mimeType};base64,${atmoData.image.data}`;
-        addLog('Atmosphere image ready.', 'success', atmoDataUrl);
+        addLog('Imagem da atmosfera pronta.', 'success', atmoDataUrl);
         atmosphereImages = [{ data: atmoData.image.data, mimeType: atmoData.image.mimeType }];
         atmosphereDesc = (atmoData.prompt as string) || settingInput;
         atmosphereSources = [atmoDataUrl];
       } else {
         setAppState('GENERATING_PROMPT');
-        addLog('Analyzing images...');
+        addLog('Analisando imagens…');
         addLog(`Product: ${describe(product)}`, 'info');
         addLog(`Atmosphere: ${describe(atmosphere!)}`, 'info');
-        addLog('Encoding images...', 'warn');
+        addLog('Preparando imagens…', 'warn');
         atmosphereImages = await toInlineImages(atmosphere!.images);
         atmosphereDesc = atmosphere!.description.replace(/\{product_id\}/g, productLabel);
         atmosphereSources = atmosphere!.images;
@@ -207,21 +186,21 @@ export default function StudioPage() {
       setSubmittedImages([...product.images, ...atmosphereSources]);
 
       setAppState('GENERATING_PROMPT');
-      addLog('Requesting Gemini Flash prompt translation...', 'warn');
+      addLog('Solicitando o prompt cinematográfico ao Gemini…', 'warn');
       const promptRes = await fetch('/api/studio/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ productDesc: product.description, atmosphereDesc, productImages, atmosphereImages })
       });
       const promptData = await promptRes.json();
-      if (!promptRes.ok) throw new Error(promptData.error || 'Failed to generate prompt');
+      if (!promptRes.ok) throw new Error(promptData.error || 'Não foi possível gerar o prompt');
 
       const generatedPrompt = promptData.prompt as string;
-      addLog('Prompt generation complete.', 'success');
+      addLog('Prompt concluído.', 'success');
 
       setAppState('GENERATING_VIDEO');
-      addLog('Initializing Omni Video Generation pipeline...');
-      addLog('Transmitting payloads to Omni...', 'warn');
+      addLog('Iniciando a geração de vídeo…');
+      addLog('Enviando dados ao provedor…', 'warn');
 
       const videoRes = await fetch('/api/studio/generate-video', {
         method: 'POST',
@@ -229,13 +208,13 @@ export default function StudioPage() {
         body: JSON.stringify({ prompt: generatedPrompt, productImages, atmosphereImages })
       });
       const videoData = await videoRes.json();
-      if (!videoRes.ok) throw new Error(videoData.error || 'Failed to start video generation');
+      if (!videoRes.ok) throw new Error(videoData.error || 'Não foi possível iniciar a geração do vídeo');
 
       addLog(`Interaction created successfully. ID: ${videoData.interactionId}`, 'success');
       pollVideoStatus(videoData.fileId, videoData.interactionId, generatedPrompt, true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setAppState('IDLE');
-      addLog(`Error: ${e.message}`, 'error');
+      addLog(`Error: ${getErrorMessage(e)}`, 'error');
     }
   };
 
@@ -263,9 +242,9 @@ export default function StudioPage() {
 
       addLog(`Edit interaction created: ${data.interactionId}`, 'success');
       pollVideoStatus(data.fileId, data.interactionId, instructions, false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setAppState('VIDEO_READY');
-      addLog(`Edit failed: ${e.message}`, 'error');
+      addLog(`Edit failed: ${getErrorMessage(e)}`, 'error');
     }
   };
 
@@ -292,52 +271,42 @@ export default function StudioPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      addLog(`Download failed: ${e.message}`, 'error');
+    } catch (e: unknown) {
+      addLog(`Falha no download: ${getErrorMessage(e)}`, 'error');
     } finally {
       setDownloading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] flex flex-col font-sans text-slate-800 dark:text-slate-200 transition-colors duration-300">
+    <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-800 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-200">
 
       {/* Navbar */}
-      <header className="bg-[#2a3645] dark:bg-[#1e293b] text-white py-3 px-8 flex justify-between items-center shadow-md z-10 sticky top-0 transition-colors duration-300">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Brain className="w-6 h-6 text-pink-400" />
-            <span className="font-semibold text-xl tracking-tight">AI-PostGen</span>
+      <header className="sticky top-0 z-30 flex items-center border-b border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-400">
+            <Sparkles className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold tracking-tight text-slate-900 dark:text-white">Product Studio</h1>
+            <p className="hidden text-xs text-slate-500 sm:block">Vídeos de produto com IA</p>
           </div>
-        </div>
-        <div className="flex items-center gap-5">
-          <button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-full hover:bg-slate-700/50 text-slate-300 hover:text-white transition-colors"
-            title={darkMode ? "Mudar para modo claro" : "Mudar para modo escuro"}
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-          <Link href="/" className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 text-white rounded-lg transition-colors text-sm font-medium">
-            <ArrowLeft className="w-4 h-4" />
-            Voltar para o Dashboard
-          </Link>
         </div>
       </header>
 
       {/* MAIN */}
-      <main className="flex-1 w-full max-w-[1400px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-8">
+      <main className="mx-auto grid w-full max-w-[1400px] flex-1 grid-cols-1 gap-6 p-4 sm:p-6 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
 
         {/* LEFT - BUILDER */}
         <section className="flex flex-col gap-6">
-          {/* Wood Corkboard Style Container */}
-          <div className="bg-[#a87c51] dark:bg-[#5c4028] p-3 rounded-[20px] shadow-xl relative overflow-hidden transition-colors duration-300 h-full">
-            <div className="bg-white dark:bg-[#1e293b] rounded-xl p-6 shadow-inner relative flex flex-col gap-6 h-full border border-[#f0eade] dark:border-slate-700 transition-colors duration-300">
+          <div className="relative h-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900">
+            <div className="relative flex h-full flex-col gap-6 bg-transparent p-5 transition-colors sm:p-6">
               <header className="mb-2">
-                <h1 className="text-2xl md:text-3xl font-black tracking-tighter text-gray-800 dark:text-white mb-2">
-                  Omni <span className="text-blue-500">Product Studio</span>
-                </h1>
-                <p className="font-mono text-xs uppercase tracking-widest text-gray-500 dark:text-gray-400 leading-relaxed">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-500">Omni workspace</p>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-800 dark:text-white">
+                  Monte seu vídeo
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
                   Transforme imagens estáticas de produtos em vídeos cinematográficos
                 </p>
               </header>
@@ -392,7 +361,7 @@ export default function StudioPage() {
                 {otherVersions.length > 0 && (
                   <div className="flex gap-3 md:gap-4 mb-8">
                     <div className="flex-none w-12" />
-                    <ScrollRow className="flex-1 min-w-0" rowClassName="gap-4" deps={[otherVersions.length]}>
+                    <ScrollRow className="flex-1 min-w-0" rowClassName="gap-4" revision={otherVersions.length}>
                       {otherVersions.map(v => (
                         <button key={v.label} onClick={() => selectVersion(v.label)} className="group flex-none text-left">
                           <div className="font-mono text-xs uppercase tracking-widest text-gray-500 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 mb-1.5 transition-colors">{v.label}</div>
@@ -430,7 +399,7 @@ export default function StudioPage() {
                           onClick={() => downloadVideo(selected)}
                           disabled={downloading}
                           aria-label={`Download ${selected.label}`}
-                          title="Download video"
+                          title="Baixar vídeo"
                           className="w-fit text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white transition-colors disabled:opacity-50"
                         >
                           {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -479,12 +448,15 @@ export default function StudioPage() {
                 {appState === 'VIDEO_READY' && submittedImages.length > 0 && (
                   <div className="flex gap-3 md:gap-4 mt-6">
                     <div className="flex-none w-12" />
-                    <ScrollRow className="flex-1 min-w-0" rowClassName="gap-2" deps={[submittedImages.length]}>
+                    <ScrollRow className="flex-1 min-w-0" rowClassName="gap-2" revision={submittedImages.length}>
                       {submittedImages.map((src, i) => (
-                        <img
+                        <Image
                           key={i}
                           src={src}
                           alt={`Input ${i + 1}`}
+                          width={96}
+                          height={64}
+                          unoptimized
                           className="flex-none w-24 h-16 object-cover bg-gray-100 dark:bg-slate-700 rounded border border-gray-200 dark:border-slate-600"
                         />
                       ))}
@@ -546,4 +518,3 @@ export default function StudioPage() {
     </div>
   );
 }
-

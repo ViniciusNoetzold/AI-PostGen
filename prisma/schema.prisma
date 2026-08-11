@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  VIEWER
+  EDITOR
+  APPROVER
+  ADMIN
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  ARCHIVED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum JobProvider {
+  GEMINI
+  META
+  TELEGRAM
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  PUBLISH
+  LOGIN
+  OAUTH_CONNECT
+  TOKEN_REFRESH
+}
+
+enum RelationshipType {
+  CUSTOMER
+  PARTNER
+  SUPPLIER
+  REFERRAL
+  TEAM
+  OTHER
+}
+
+enum PersonCategory {
+  OWNER
+  COFOUNDER
+  EMPLOYEE
+  CUSTOMER
+  LEAD
+  PARTNER
+  OTHER
+}
+
+model AppUser {
+  id        String     @id @default(uuid()) @db.Uuid
+  clerkId   String     @unique
+  email     String?
+  name      String?
+  role      UserRole   @default(VIEWER)
+  active    Boolean    @default(true)
+  posts     Post[]     @relation("PostAuthor")
+  approvals Approval[]
+  audits    AuditLog[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Client {
+  id                    String               @id @default(uuid()) @db.Uuid
+  slug                  String               @unique
+  name                  String
+  email                 String?
+  phone                 String?
+  company               String?
+  companyId             String?              @db.Uuid
+  organization          Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  photoUrl              String?
+  jobTitle              String?
+  category              PersonCategory       @default(OTHER)
+  city                  String?
+  state                 String?
+  tags                  String[]             @default([])
+  notes                 String?
+  active                Boolean              @default(true)
+  metadata              Json?
+  posts                 Post[]
+  outgoingRelationships ClientRelationship[] @relation("RelationshipSource")
+  incomingRelationships ClientRelationship[] @relation("RelationshipTarget")
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([active, name])
+  @@index([companyId, active])
+  @@index([category, active])
+}
+
+model Company {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  legalName   String?
+  document    String?
+  industry    String?
+  website     String?
+  logoUrl     String?
+  description String?
+  city        String?
+  state       String?
+  country     String   @default("Brasil")
+  active      Boolean  @default(true)
+  clients     Client[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, name])
+  @@index([city, state])
+}
+
+model ClientRelationship {
+  id             String           @id @default(uuid()) @db.Uuid
+  sourceClientId String           @db.Uuid
+  targetClientId String           @db.Uuid
+  source         Client           @relation("RelationshipSource", fields: [sourceClientId], references: [id], onDelete: Cascade)
+  target         Client           @relation("RelationshipTarget", fields: [targetClientId], references: [id], onDelete: Cascade)
+  type           RelationshipType @default(OTHER)
+  label          String?
+  strength       Int              @default(1)
+  notes          String?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([sourceClientId, targetClientId, type])
+  @@index([sourceClientId, active])
+  @@index([targetClientId, active])
+}
+
+model Post {
+  id             String      @id @default(uuid()) @db.Uuid
+  clientId       String?     @db.Uuid
+  client         Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdById    String?     @db.Uuid
+  createdBy      AppUser?    @relation("PostAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  theme          String
+  content        String      @db.Text
+  language       String      @default("pt-BR")
+  tone           String?
+  status         PostStatus  @default(DRAFT)
+  isCarousel     Boolean     @default(false)
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  externalPostId String?
+  sourceFile     String?
+  workflowRunId  String?     @unique
+  version        Int         @default(1)
+  media          MediaAsset[]
+  approvals      Approval[]
+  jobs           IntegrationJob[]
+  metrics        Metric[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([clientId, createdAt])
+}
+
+model MediaAsset {
+  id          String    @id @default(uuid()) @db.Uuid
+  postId      String?   @db.Uuid
+  post        Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  kind        MediaKind
+  storageKey  String    @unique
+  url         String
+  contentType String
+  bytes       Int
+  checksum    String
+  width       Int?
+  height      Int?
+  durationMs  Int?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([postId, kind])
+}
+
+model Approval {
+  id           String   @id @default(uuid()) @db.Uuid
+  postId       String   @db.Uuid
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reviewerId   String?  @db.Uuid
+  reviewer     AppUser? @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+  approved     Boolean
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model IntegrationJob {
+  id             String      @id @default(uuid()) @db.Uuid
+  workflowRunId  String?     @unique
+  provider       JobProvider
+  operation      String
+  status         JobStatus   @default(QUEUED)
+  postId         String?     @db.Uuid
+  post           Post?       @relation(fields: [postId], references: [id], onDelete: SetNull)
+  idempotencyKey String      @unique
+  attempts       Int         @default(0)
+  maxAttempts    Int         @default(5)
+  input          Json
+  output         Json?
+  lastError      String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([status, createdAt])
+  @@index([provider, status])
+}
+
+model IdempotencyRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  key          String   @unique
+  scope        String
+  requestHash  String
+  responseCode Int?
+  responseBody Json?
+  lockedAt     DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model Metric {
+  id         String   @id @default(uuid()) @db.Uuid
+  postId     String?  @db.Uuid
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  provider   String
+  metric     String
+  value      Decimal  @db.Decimal(18, 4)
+  capturedAt DateTime @default(now())
+  dimensions Json?
+
+  @@index([provider, metric, capturedAt])
+  @@index([postId, capturedAt])
+}
+
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  actorId    String?     @db.Uuid
+  actor      AppUser?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  requestId  String
+  action     AuditAction
+  entityType String
+  entityId   String?
+  ipHash     String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model MetaConnection {
+  id                    String   @id @default(uuid()) @db.Uuid
+  accountId             String   @unique
+  pageId                 String?
+  instagramBusinessId   String?
+  encryptedAccessToken  String   @db.Text
+  encryptedRefreshToken String?  @db.Text
+  tokenExpiresAt        DateTime?
+  scopes                 String[]
+  active                 Boolean  @default(true)
+  lastRefreshedAt        DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface ScrollRowProps {
   children: React.ReactNode;
@@ -9,7 +9,7 @@ interface ScrollRowProps {
   /** Classes for the inner horizontally-scrolling flex row (e.g. `gap-2 pb-2`). */
   rowClassName?: string;
   /** Recompute the indicator when these change — typically the item count. */
-  deps?: React.DependencyList;
+  revision?: number;
   /** Dim the row to match the disabled-submit treatment. */
   faded?: boolean;
 }
@@ -17,11 +17,11 @@ interface ScrollRowProps {
 // A horizontally-scrolling row with an always-visible scroll indicator on mobile.
 // Native scrollbars are hidden everywhere in this app, and iOS Safari's overlay
 // scrollbar can't be styled and auto-hides at rest — so we render our own track.
-export function ScrollRow({ children, className = '', rowClassName = '', deps = [], faded = false }: ScrollRowProps) {
+export function ScrollRow({ children, className = '', rowClassName = '', revision = 0, faded = false }: ScrollRowProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [bar, setBar] = useState({ width: 0, left: 0 });
 
-  const update = () => {
+  const update = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const { scrollWidth, clientWidth, scrollLeft } = el;
@@ -32,14 +32,14 @@ export function ScrollRow({ children, className = '', rowClassName = '', deps = 
     }
     const width = (clientWidth / scrollWidth) * 100;
     setBar({ width, left: (scrollLeft / overflow) * (100 - width) });
-  };
+  }, []);
 
   // Layout effect so it measures after new items render; also track viewport resizes.
-  useLayoutEffect(() => { update(); }, deps);   // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { update(); }, [revision, update]);
   useEffect(() => {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, []);
+  }, [update]);
 
   return (
     <div className={className}>

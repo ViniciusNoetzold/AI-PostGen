@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import { GoogleGenAI } from '@google/genai';
+import { getProviderErrorMessage } from '@/lib/errors';
+import { studioAtmosphereSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
+import { storeObject } from '@/lib/server/storage';
 
 const ATMOSPHERE_DIRECTOR_SYSTEM_INSTRUCTION = `#Your Role
 
@@ -64,13 +69,12 @@ async function fileUriToBase64(uri: string): Promise<{ data: string; mimeType: s
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await authorizeRequest(req, 'editor');
+  if (denied) return denied;
   try {
-    const body = await req.json();
-    const { input } = body;
-    
-    if (!input || !input.trim()) {
-      return NextResponse.json({ error: 'No atmosphere prompt provided' }, { status: 400 });
-    }
+    const validated = await validateJsonRequest(req, studioAtmosphereSchema);
+    if (!validated.ok) return validated.response;
+    const { input } = validated.data;
 
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY environment variable is missing');
@@ -112,9 +116,16 @@ export async function POST(req: NextRequest) {
     if (!data && image?.uri) ({ data, mimeType } = await fileUriToBase64(image.uri));
     if (!data) throw new Error('gemini-3.1-flash-lite-image returned no image');
 
-    return NextResponse.json({ image: { data, mimeType }, prompt: imagePrompt });
-  } catch (e: any) {
+    const stored = await storeObject({
+      data: Buffer.from(data, 'base64'),
+      contentType: mimeType,
+      extension: mimeType.split('/')[1] || 'jpg',
+      prefix: 'images',
+    });
+
+    return NextResponse.json({ image: { data, mimeType, url: stored.url, storageKey: stored.key }, prompt: imagePrompt });
+  } catch (e: unknown) {
     console.error('Error generating atmosphere:', e);
-    return NextResponse.json({ error: e?.body || e.message }, { status: 500 });
+    return NextResponse.json({ error: getProviderErrorMessage(e) }, { status: 500 });
   }
 }

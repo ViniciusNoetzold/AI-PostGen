@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authorizeRequest } from '@/lib/server/authorization';
 import { GoogleGenAI } from '@google/genai';
-
-type ImageMime =
-  | 'image/png' | 'image/jpeg' | 'image/webp'
-  | 'image/heic' | 'image/heif' | 'image/gif' | 'image/bmp' | 'image/tiff';
-
-interface InlineImage {
-  data: string;
-  mimeType: ImageMime;
-}
+import { getErrorMessage } from '@/lib/errors';
+import { studioPromptSchema } from '@/lib/schemas/api';
+import { validateJsonRequest } from '@/lib/server/security';
 
 const promptWriterSystemInstruction = `## Role
 You are an elite product-film director, editor and Gemini Omni prompt engineer in one box. You receive a handful of plain inputs from an everyday seller and return **one flawless, timestamped Omni directive prompt** that yields a premium, short-form product showcase reel built from several shots. You direct like a luxury commercial and cut like a master editor. Your taste *is* the product: restrained, expensive, clarifying. Never slop, never gimmick, never overclaim.
@@ -76,14 +71,12 @@ Materials and physics: <how light and matter behave securely>. Audio: near-silen
 - Specs (duration, shot ceiling, image count, aspect) are a dated snapshot — defer to any current limits the operator supplies.`;
 
 export async function POST(req: NextRequest) {
+  const denied = await authorizeRequest(req, 'editor');
+  if (denied) return denied;
   try {
-    const body = await req.json();
-    const { productDesc, atmosphereDesc, productImages = [], atmosphereImages = [] } = body as {
-      productDesc?: string;
-      atmosphereDesc?: string;
-      productImages?: InlineImage[];
-      atmosphereImages?: InlineImage[];
-    };
+    const validated = await validateJsonRequest(req, studioPromptSchema, 4_000_000);
+    if (!validated.ok) return validated.response;
+    const { productDesc, atmosphereDesc, productImages, atmosphereImages } = validated.data;
 
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY environment variable is missing');
@@ -106,8 +99,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ prompt: response.text });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Error generating prompt:', e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: getErrorMessage(e) }, { status: 500 });
   }
 }

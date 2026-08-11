@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "app/.well-known/workflow/**",
+    "app/generated/prisma/**",
+    // One-off local provider probes are not part of the application source.
+    "test-*.js",
   ]),
 ]);
 

@@ -1,27 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import Image from 'next/image';
 import { X, Heart, MessageCircle, Send, Bookmark, ChevronLeft, ChevronRight, MoreHorizontal, ArrowLeft, ArrowRight } from 'lucide-react';
+import type { HistoryPost } from '@/lib/posts';
 
 interface InstagramPreviewModalProps {
-  post: any;
+  post: HistoryPost;
   profile: { name: string; avatarUrl: string };
   onClose: () => void;
   onSaveOrder: (newImageUrls: string[]) => Promise<void>;
 }
 
 export default function InstagramPreviewModal({ post, profile, onClose, onSaveOrder }: InstagramPreviewModalProps) {
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<string[]>(() =>
+    post.imageUrls.length > 0 ? [...post.imageUrls] : post.imageUrl ? [post.imageUrl] : [],
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (post.imageUrls && post.imageUrls.length > 0) {
-      setImages([...post.imageUrls]);
-    } else if (post.imageUrl) {
-      setImages([post.imageUrl]);
-    }
-  }, [post]);
 
   const handlePrev = () => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
@@ -70,17 +66,16 @@ export default function InstagramPreviewModal({ post, profile, onClose, onSaveOr
   const avatar = profile?.avatarUrl || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff';
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#121212] rounded-xl shadow-2xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden max-h-[90vh]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-label="Pré-visualização do post" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose() }}>
+      <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-[#121212] sm:max-h-[90vh] md:flex-row">
         
         {/* Left side: Instagram Preview */}
         <div className="w-full md:w-[450px] flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-black overflow-y-auto hidden-scrollbar flex flex-col">
           {/* Mock Instagram Header */}
           <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-800">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={avatar} alt={username} className="w-full h-full object-cover" />
+              <div className="relative h-8 w-8 overflow-hidden rounded-full border border-gray-200 bg-gray-100 dark:border-gray-800">
+                <Image src={avatar} alt={username} fill sizes="32px" unoptimized className="object-cover" />
               </div>
               <span className="font-semibold text-sm text-black dark:text-white">{username}</span>
             </div>
@@ -90,8 +85,7 @@ export default function InstagramPreviewModal({ post, profile, onClose, onSaveOr
           {/* Main Image View */}
           <div className="relative w-full aspect-square bg-gray-100 dark:bg-gray-900 flex items-center justify-center overflow-hidden">
             {images.length > 0 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={images[currentIndex]} alt="Preview" className="w-full h-full object-cover" />
+              <Image src={images[currentIndex]} alt="Preview" fill sizes="(max-width: 768px) 100vw, 450px" unoptimized className="object-contain" />
             ) : (
               <span className="text-gray-400">Sem imagem</span>
             )}
@@ -146,7 +140,7 @@ export default function InstagramPreviewModal({ post, profile, onClose, onSaveOr
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-[#1e1e1e] overflow-hidden">
           <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#252525]">
             <h2 className="text-xl font-bold text-gray-800 dark:text-white">Preview e Ordenação</h2>
-            <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 transition-colors">
+            <button onClick={onClose} aria-label="Fechar pré-visualização" className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
@@ -162,13 +156,17 @@ export default function InstagramPreviewModal({ post, profile, onClose, onSaveOr
                 <div className="flex flex-wrap gap-4 mt-2">
                   {images.map((img, index) => (
                     <div key={index} className="flex flex-col items-center gap-2">
-                      <div className={`relative w-24 h-24 rounded-lg overflow-hidden border-2 cursor-pointer ${currentIndex === index ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'}`}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={img} alt={`Thumb ${index}`} className="w-full h-full object-cover" onClick={() => setCurrentIndex(index)} />
+                      <button
+                        type="button"
+                        onClick={() => setCurrentIndex(index)}
+                        aria-label={`Visualizar imagem ${index + 1}`}
+                        className={`relative w-24 h-24 rounded-lg overflow-hidden border-2 cursor-pointer ${currentIndex === index ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'}`}
+                      >
+                        <Image src={img} alt={`Miniatura ${index + 1}`} fill sizes="96px" unoptimized className="object-cover" />
                         <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded font-bold pointer-events-none">
                           {index + 1}
                         </div>
-                      </div>
+                      </button>
                       <div className="flex gap-1">
                         <button 
                           onClick={() => moveImageLeft(index)} 

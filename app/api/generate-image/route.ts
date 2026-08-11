@@ -1,29 +1,32 @@
 import { NextResponse } from 'next/server'
+import { authorizeRequest } from '@/lib/server/authorization'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { getVaultPath } from '../../utils/config'
+import { postReferenceSchema } from '@/lib/schemas/api'
+import { safeResolvePath, validateJsonRequest } from '@/lib/server/security'
+import { atomicWriteText } from '@/lib/server/atomic-files'
 
 export async function POST(request: Request) {
+  const denied = await authorizeRequest(request, 'editor')
+  if (denied) return denied
   try {
-    const body = await request.json()
-    const { client, id } = body
-    
-    if (!client || !id) {
-      return NextResponse.json({ error: 'Client and ID are required' }, { status: 400 })
-    }
+    const validated = await validateJsonRequest(request, postReferenceSchema)
+    if (!validated.ok) return validated.response
+    const { client, id } = validated.data
 
     const VAULT_PATH = await getVaultPath()
-    const postPath = path.join(VAULT_PATH, '02-Clientes', client, '04-Posts_Gerados', id)
+    const postPath = safeResolvePath(VAULT_PATH, path.join('02-Clientes', client, '04-Posts_Gerados', id))
     
     let content;
     try {
       content = await fs.readFile(postPath, 'utf-8')
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: 'Post file not found' }, { status: 404 })
     }
     
     // Extract Image Prompts
-    let imagePrompts: string[] = []
+    const imagePrompts: string[] = []
     
     const isCarousel = content.includes('# Tipo: Carrossel')
     
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
     }
     
     const newContent = filteredLines.join('\n')
-    await fs.writeFile(postPath, newContent, 'utf-8')
+    await atomicWriteText(postPath, newContent)
     
     return NextResponse.json({ success: true, imageUrls })
     
