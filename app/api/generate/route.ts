@@ -39,8 +39,7 @@ async function sendTelegramNotification(message: string, imageBuffer?: Buffer) {
       },
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML'
+        text: message
       })
     })
   } catch (err) {
@@ -252,7 +251,7 @@ async function generateText(prompt: string, maxTokens: number = 500, isCarousel 
 }
 
 // Helper function to generate an image using Pollinations.ai (Free, High Quality, No API Key needed)
-async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url?: string}> {
+export async function generateImage(prompt: string, seed: number): Promise<{buffer: Buffer, url?: string}> {
   try {
     // Add quality modifiers and emphasize graphic design suitable for Instagram
     const enhancedPrompt = `${prompt}, instagram post style, flat design, clean corporate look, minimalist, highly professional typography layout, high quality graphic design`
@@ -288,6 +287,10 @@ export async function POST(request: Request) {
     const tone = body.tone || 'Técnico, data-driven, provocativo e focado em engajamento'
     const highMode = body.highMode || false
     const isCarousel = body.isCarousel || false
+    const wantImage = body.wantImage || false
+    const customImagePrompt = body.customImagePrompt || ''
+    const wantVideo = body.wantVideo || false
+    const customVideoPrompt = body.customVideoPrompt || ''
     
     if (!theme) {
       return NextResponse.json(
@@ -336,7 +339,11 @@ ${highMode
 }
 ${isCarousel 
   ? '- MODO CARROSSEL ATIVADO: Forneça EXATAMENTE 3 a 5 prompts de imagem diferentes, cada um em uma nova linha no formato [Prompt de Imagem X: detailed english prompt here], onde X é o número da imagem (1, 2, 3...). FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÉTICO: tipografia em inglês, design minimalista, cores sólidas, flat design, ilustrações. Evite fotos de pessoas reais.'
-  : '- O prompt da imagem deve ser a última linha e em INGLÊS no formato [Prompt de Imagem: detailed english prompt here]. FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÉTICO: tipografia em inglês, design minimalista, layout de texto, cores sólidas, estilo infográfico ou flat design. Evite fotos de pessoas reais.'
+  : (wantImage ? `- A última ou penúltima linha deve ser em INGLÊS no formato [Prompt de Imagem: detailed english prompt here]. FOCAR FORTEMENTE EM ESTILO GRÁFICO/ESTÉTICO. ${customImagePrompt ? `INCLUA NECESSARIAMENTE A SEGUINTE IDEIA DO USUÁRIO NO PROMPT DE IMAGEM: "${customImagePrompt}"` : ''}` : '- O prompt da imagem deve ser a última ou penúltima linha e em INGLÊS no formato [Prompt de Imagem: detailed english prompt here].')
+}
+${wantVideo 
+  ? `- Inclua também um prompt de vídeo na penúltima ou última linha no formato [Prompt de Video: detailed english prompt here]. ${customVideoPrompt ? `INCLUA NECESSARIAMENTE A SEGUINTE IDEIA DO USUÁRIO NO PROMPT DE VÍDEO: "${customVideoPrompt}"` : ''}`
+  : ''
 }
 - Forneça as hashtags em uma linha separada, começando com #.
 - Forneça as menções em uma linha separada, começando com @.
@@ -349,8 +356,9 @@ FORMATO DE RESPOSTA:
 [Menções: @menção1 @menção2 ...]
 ${isCarousel 
   ? '[Prompt de Imagem 1: detailed english prompt here]\n[Prompt de Imagem 2: detailed english prompt here]\n[Prompt de Imagem 3: detailed english prompt here]'
-  : '[Prompt de Imagem: detailed english prompt here]'
+  : (wantImage ? '[Prompt de Imagem: detailed english prompt here]' : '')
 }
+${wantVideo ? '[Prompt de Video: detailed english prompt here]' : ''}
 `
     
     // 3. Generate text with IA
@@ -376,93 +384,64 @@ ${isCarousel
       }
     }
     
-    // 4. Generate Images
+    // 4. Generate Images - Disabled to make it manual
     let imageGenerated = false
     let imageBuffers: Buffer[] = []
     let imageUrls: string[] = []
     
-    try {
-      // Limit to max 5 images to avoid excessive API calls
-      const generatePromises = imagePrompts.slice(0, 5).map(async (prompt) => {
-        const seed = Math.floor(Math.random() * 1000000000)
-        return generateImage(prompt, seed)
-      })
-      
-      const results = await Promise.allSettled(generatePromises)
-      
-      for (const res of results) {
-        if (res.status === 'fulfilled') {
-          imageBuffers.push(res.value.buffer)
-          if (res.value.url) {
-            imageUrls.push(res.value.url)
-          }
-        } else {
-          console.error('Failed to generate one of the images:', res.reason)
-        }
-      }
-      if (imageBuffers.length > 0) imageGenerated = true
-    } catch (err) {
-      console.error('Failed to generate images, continuing without them.')
-    }
-    
     // 5. Send Notification
-    await sendTelegramNotification(`🤖 <b>Novo Post Gerado!</b>\n\n<b>Tema:</b> ${theme}\n\n${generatedText}${imageGenerated ? `\n\n<i>📸 ${imageBuffers.length} Imagens geradas!</i>` : ''}`, imageBuffers.length > 0 ? imageBuffers[0] : undefined)
+    await sendTelegramNotification(`🤖 Novo Post Gerado!\n\nTema: ${theme}\n\n${generatedText}`)
     
-    // 6. Save generated post and image to vault if a client was matched
-    let imagePathMsg = ''
+    // 6. Save generated post to vault if a client was matched
     if (clientFolder) {
       try {
         const VAULT_PATH = await getVaultPath();
         const postsDir = path.join(VAULT_PATH, '02-Clientes', clientFolder, '04-Posts_Gerados')
-        const imagesDir = path.join(VAULT_PATH, '02-Clientes', clientFolder, '05-Imagens_Geradas')
         
         // Ensure directories exist
         await fs.mkdir(postsDir, { recursive: true })
-        if (imageGenerated) {
-          await fs.mkdir(imagesDir, { recursive: true })
-        }
         
         // Create safe filename
         const safeTheme = theme.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 30)
         const dateStr = new Date().toISOString().split('T')[0]
         const fileName = `post_${dateStr}_${safeTheme}`
         
-        // Save images
-        if (imageGenerated && imageBuffers.length > 0) {
-          imagePathMsg = 'Múltiplas imagens geradas.'
-          for (let i = 0; i < imageBuffers.length; i++) {
-            const imageFileName = imageBuffers.length > 1 ? `${fileName}_${i+1}.jpg` : `${fileName}.jpg`
-            const imageFilePath = path.join(imagesDir, imageFileName)
-            await fs.writeFile(imageFilePath, imageBuffers[i])
-            console.log(`Imagem salva em: ${imageFilePath}`)
-            if (i === 0) imagePathMsg = imageFilePath
-          }
-        }
-
         // Save markdown
         const textFilePath = path.join(postsDir, `${fileName}.md`)
         let headers = `# Tema: ${theme}\n# Modo: ${highMode ? 'Turbo' : 'Normal'}`
         if (isCarousel) {
           headers += `\n# Tipo: Carrossel`
         }
-        if (imageUrls.length > 0) {
-          headers += `\n# ImageUrls: ${imageUrls.join(',')}`
+        if (wantImage) {
+          headers += `\n# Gerar Imagem: Sim`
+        }
+        if (wantVideo) {
+          headers += `\n# Gerar Video: Sim`
         }
         const fileContent = `${headers}\n\n${generatedText}`
         await fs.writeFile(textFilePath, fileContent, 'utf-8')
         console.log(`Post salvo em: ${textFilePath}`)
         
+        // 7. Return the result (with client and postId)
+        return NextResponse.json({ 
+          result: generatedText, 
+          imageGenerated: false,
+          imagePath: '',
+          imageUrls: [],
+          postId: fileName,
+          client: clientFolder
+        })
       } catch (err) {
         console.error('Erro ao salvar post no vault:', err)
       }
     }
 
-    // 7. Return the result
+    // 7. Return the result (fallback if no client matched or failed to save)
     return NextResponse.json({ 
       result: generatedText, 
-      imageGenerated,
-      imagePath: imagePathMsg,
-      imageUrls: imageUrls
+      imageGenerated: false,
+      imagePath: '',
+      imageUrls: []
     })
   } catch (error) {
     console.error('Error in generate API:', error)

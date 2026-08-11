@@ -34,11 +34,11 @@ const getClientVaultPath = async (clientName: string) => {
 
 export async function POST(req: Request) {
   try {
-    const { client, imageUrls, caption, fileName } = await req.json();
+    const { client, imageUrls, videoUrl, caption, fileName } = await req.json();
 
-    if (!client || !imageUrls || imageUrls.length === 0 || !caption) {
+    if (!client || (!imageUrls?.length && !videoUrl) || !caption) {
       return NextResponse.json(
-        { error: 'Cliente, URLs de imagem e legenda são obrigatórios' },
+        { error: 'Cliente, URLs de mídia (imagem ou vídeo) e legenda são obrigatórios' },
         { status: 400 }
       );
     }
@@ -87,7 +87,22 @@ export async function POST(req: Request) {
 
     let creationId = null;
 
-    if (imageUrls.length === 1) {
+    if (videoUrl) {
+      // Create Reels video container
+      const createMediaUrl = `https://graph.facebook.com/v19.0/${accountId}/media?media_type=REELS&video_url=${encodeURIComponent(videoUrl)}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
+      
+      const mediaResponse = await fetch(createMediaUrl, { method: 'POST' });
+      const mediaData = await mediaResponse.json();
+
+      if (mediaData.error) {
+        console.error("Erro ao criar video no Instagram:", mediaData.error);
+        return NextResponse.json(
+          { error: `Erro na API da Meta (criação de vídeo): ${mediaData.error.message}` },
+          { status: 500 }
+        );
+      }
+      creationId = mediaData.id;
+    } else if (imageUrls.length === 1) {
       // 1. Criar o container de mídia único (Upload)
       const createMediaUrl = `https://graph.facebook.com/v19.0/${accountId}/media?image_url=${encodeURIComponent(imageUrls[0])}&caption=${encodeURIComponent(caption)}&access_token=${accessToken}`;
       

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Brain, PieChart as PieChartIcon, BarChart2 } from 'lucide-react'
+import { Brain, PieChart as PieChartIcon, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react'
 
 // ForceGraph2D uses browser-only APIs (window/document), so it must be
 // loaded dynamically on the client side only (ssr: false)
@@ -29,6 +29,7 @@ type StatsData = {
 export default function VaultVisualization({ darkMode = false }: { darkMode?: boolean }) {
   const [view, setView] = useState<'neural' | 'pie' | 'bar'>('neural')
   const [zoom, setZoom] = useState(1)
+  const [panX, setPanX] = useState(0)
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] })
   const [statsData, setStatsData] = useState<StatsData>({ postsPerClient: [], themes: [] })
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
@@ -44,9 +45,10 @@ export default function VaultVisualization({ darkMode = false }: { darkMode?: bo
       .catch(console.error)
   }, [])
 
-  // Reset zoom when view changes
+  // Reset zoom and pan when view changes
   useEffect(() => {
     setZoom(1)
+    setPanX(0)
   }, [view])
 
   useEffect(() => {
@@ -133,17 +135,38 @@ export default function VaultVisualization({ darkMode = false }: { darkMode?: bo
           <div 
             className="absolute inset-0 flex items-center justify-center p-4 overflow-hidden group bg-white dark:bg-slate-800"
             onWheel={(e) => {
-              if (!e.ctrlKey) return;
+              if (!e.shiftKey) return;
               e.preventDefault();
               setZoom(z => Math.min(Math.max(0.5, z + (e.deltaY * -0.002)), 4));
             }}
           >
             {/* Helper tooltip */}
             <div className="absolute top-4 right-4 bg-slate-800/80 text-white text-xs px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              Use Ctrl + Scroll para Zoom
+              Use Shift + Scroll para Zoom
+            </div>
+
+            {/* Navigation Controls */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-full shadow-lg z-10 border border-slate-700">
+              <button 
+                onClick={() => setPanX(p => p + 100)} 
+                className="p-1.5 hover:bg-slate-700 rounded-full text-white transition-colors"
+                title="Mover conteúdo para direita"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="text-white/80 text-xs font-medium px-2 border-x border-slate-600/50">
+                Navegar
+              </div>
+              <button 
+                onClick={() => setPanX(p => p - 100)} 
+                className="p-1.5 hover:bg-slate-700 rounded-full text-white transition-colors"
+                title="Mover conteúdo para esquerda"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
             
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform 0.1s ease-out', width: '100%', height: '100%' }}>
+            <div style={{ transform: `translateX(${panX}px) scale(${zoom})`, transformOrigin: 'center', transition: 'transform 0.1s ease-out', width: '100%', height: '100%' }}>
               {statsData.themes.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -181,17 +204,38 @@ export default function VaultVisualization({ darkMode = false }: { darkMode?: bo
           <div 
             className="absolute inset-0 flex items-center justify-center p-4 overflow-hidden group bg-white dark:bg-slate-800"
             onWheel={(e) => {
-              if (!e.ctrlKey) return;
+              if (!e.shiftKey) return;
               e.preventDefault();
               setZoom(z => Math.min(Math.max(0.5, z + (e.deltaY * -0.002)), 4));
             }}
           >
             {/* Helper tooltip */}
             <div className="absolute top-4 right-4 bg-slate-800/80 text-white text-xs px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              Use Ctrl + Scroll para Zoom
+              Use Shift + Scroll para Zoom
             </div>
 
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center', transition: 'transform 0.1s ease-out', width: '100%', height: '100%' }}>
+            {/* Navigation Controls */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-800/90 p-1.5 rounded-full shadow-lg z-10 border border-slate-700">
+              <button 
+                onClick={() => setPanX(p => p + 100)} 
+                className="p-1.5 hover:bg-slate-700 rounded-full text-white transition-colors"
+                title="Mover conteúdo para direita"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="text-white/80 text-xs font-medium px-2 border-x border-slate-600/50">
+                Navegar
+              </div>
+              <button 
+                onClick={() => setPanX(p => p - 100)} 
+                className="p-1.5 hover:bg-slate-700 rounded-full text-white transition-colors"
+                title="Mover conteúdo para esquerda"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div style={{ transform: `translateX(${panX}px) scale(${zoom})`, transformOrigin: 'center', transition: 'transform 0.1s ease-out', width: '100%', height: '100%' }}>
               {statsData.postsPerClient.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={statsData.postsPerClient} margin={{ top: 30, right: 30, left: 20, bottom: 80 }}>
