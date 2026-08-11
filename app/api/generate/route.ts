@@ -23,7 +23,7 @@ async function sendTelegramNotification(message: string, imageBuffer?: Buffer) {
       const photoUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`
       const formData = new FormData()
       formData.append('chat_id', TELEGRAM_CHAT_ID)
-      formData.append('photo', new Blob([imageBuffer], { type: 'image/jpeg' }), 'image.jpg')
+      formData.append('photo', new Blob([imageBuffer as any], { type: 'image/jpeg' }), 'image.jpg')
       
       await fetch(photoUrl, {
         method: 'POST',

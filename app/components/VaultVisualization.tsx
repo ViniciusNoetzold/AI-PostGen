@@ -155,7 +155,7 @@ export default function VaultVisualization({ darkMode = false }: { darkMode?: bo
                       outerRadius={140}
                       paddingAngle={5}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      label={({ name, percent }) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
                       labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                     >
                       {statsData.themes.map((entry, index) => (

@@ -26,7 +26,7 @@ export async function GET() {
         const id = fullPath.replace(VAULT_PATH, '').replace(/^[\\\/]/, '')
         const isDir = entry.isDirectory()
         
-        const node = {
+        const node: any = {
           id: id,
           name: entry.name.replace(/\.md$/, ''),
           group: isDir ? 'folder' : 'file',

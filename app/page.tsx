@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { 
   Brain, Bell, UserCircle, Search, Trash2, Edit3, 
-  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight, X, Settings, BarChart2, Sun, Moon, CheckCircle, AlertCircle, Info, UploadCloud
+  Copy, Image as ImageIcon, Zap, ChevronLeft, ChevronRight, X, Settings, BarChart2, Sun, Moon, CheckCircle, AlertCircle, Info, UploadCloud, Film
 } from 'lucide-react'
 import VaultVisualization from './components/VaultVisualization'
 
@@ -432,9 +433,15 @@ export default function Home() {
       
       {/* Navbar */}
       <header className="bg-[#2a3645] dark:bg-[#1e293b] text-white py-3 px-8 flex justify-between items-center shadow-md z-10 sticky top-0 transition-colors duration-300">
-        <div className="flex items-center gap-2">
-          <Brain className="w-6 h-6 text-pink-400" />
-          <span className="font-semibold text-xl tracking-tight">AI-PostGen</span>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Brain className="w-6 h-6 text-pink-400" />
+            <span className="font-semibold text-xl tracking-tight">AI-PostGen</span>
+          </div>
+          <Link href="/studio" className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg transition-colors border border-indigo-500/30 text-sm font-medium">
+            <Film className="w-4 h-4" />
+            Product Studio
+          </Link>
         </div>
         <div className="flex items-center gap-5">
           <button 
