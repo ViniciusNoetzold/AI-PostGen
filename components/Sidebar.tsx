@@ -7,13 +7,16 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   CalendarDays,
   ChevronUp,
+  FileSpreadsheet,
   FileText,
+  Globe,
   Image as ImageIcon,
   LayoutDashboard,
   PenTool,
   Settings,
   UserRound,
   Users,
+  Video,
   X,
 } from 'lucide-react';
 import { Show, useClerk, useUser } from '@clerk/nextjs';
@@ -31,6 +34,9 @@ const navItems = [
   { href: '/', label: 'Dashboard', mobileLabel: 'Início', icon: LayoutDashboard },
   { href: '/ai-post-gen', label: 'AI Post Gen', mobileLabel: 'Posts', icon: PenTool },
   { href: '/studio', label: 'Product Studio', mobileLabel: 'Studio', icon: ImageIcon },
+  { href: '/orcamentos', label: 'Orçamentos (QuotePRO)', mobileLabel: 'Orçamentos', icon: FileSpreadsheet },
+  { href: '/scraper', label: 'Web Scraping Pro', mobileLabel: 'Scraper', icon: Globe },
+  { href: '/transcricao', label: 'Transcritor YouTube', mobileLabel: 'YouTube', icon: Video },
   { href: '/calendar', label: 'Calendário', mobileLabel: 'Agenda', icon: CalendarDays },
   { href: '/contacts', label: 'Clientes', mobileLabel: 'Clientes', icon: Users },
   { href: '/reports', label: 'Relatórios', mobileLabel: 'Relatórios', icon: FileText },

@@ -6,12 +6,15 @@ import {
   Activity,
   Archive,
   ArrowRight,
+  FileSpreadsheet,
   FileText,
   Film,
+  Globe,
   Image as ImageIcon,
   Images,
   PenTool,
   Users,
+  Video,
 } from 'lucide-react'
 import type { DashboardStats } from '@/lib/dashboard'
 
@@ -59,6 +62,18 @@ export default function DashboardPage() {
           <Link href="/studio" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-cyan-500/20">
             <ImageIcon className="w-5 h-5" />
             Product Studio
+          </Link>
+          <Link href="/orcamentos" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-blue-500/20">
+            <FileSpreadsheet className="w-5 h-5" />
+            Orçamentos (QuotePRO)
+          </Link>
+          <Link href="/scraper" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-violet-500/20">
+            <Globe className="w-5 h-5" />
+            Web Scraping Pro
+          </Link>
+          <Link href="/transcricao" className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-red-500/20">
+            <Video className="w-5 h-5" />
+            Transcritor YouTube
           </Link>
         </div>
       </header>
