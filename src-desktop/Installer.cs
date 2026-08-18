@@ -214,18 +214,77 @@ namespace AIPostGenInstaller
                     Directory.CreateDirectory(targetDir);
                 }
 
-                string sourceDir = AppDomain.CurrentDomain.BaseDirectory;
+                bool extracted = false;
 
-                // Copia arquivos do executável launcher e recursos
-                CopyDirectory(sourceDir, targetDir);
+                // 1. Tenta extrair do recurso embutido (Standalone self-extracting installer)
+                try
+                {
+                    System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                    using (Stream stream = assembly.GetManifestResourceStream("payload.zip"))
+                    {
+                        if (stream != null)
+                        {
+                            string tempZip = Path.Combine(Path.GetTempPath(), "aipostgen_pkg_" + Guid.NewGuid().ToString("N") + ".zip");
+                            try
+                            {
+                                using (FileStream fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write))
+                                {
+                                    stream.CopyTo(fs);
+                                }
+                                System.IO.Compression.ZipFile.ExtractToDirectory(tempZip, targetDir);
+                                extracted = true;
+                            }
+                            finally
+                            {
+                                try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                // 2. Se não estiver embutido, tenta extrair de ZIP na mesma pasta
+                if (!extracted)
+                {
+                    string sourceDir = AppDomain.CurrentDomain.BaseDirectory;
+                    try
+                    {
+                        string[] zipFiles = Directory.GetFiles(sourceDir, "*.zip");
+                        foreach (string z in zipFiles)
+                        {
+                            if (Path.GetFileName(z).StartsWith("AI-PostGen", StringComparison.OrdinalIgnoreCase))
+                            {
+                                System.IO.Compression.ZipFile.ExtractToDirectory(z, targetDir);
+                                extracted = true;
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // 3. Fallback: copia os arquivos da pasta atual caso esteja rodando no repositório
+                if (!extracted)
+                {
+                    string sourceDir = AppDomain.CurrentDomain.BaseDirectory;
+                    CopyDirectory(sourceDir, targetDir);
+                }
 
                 string launcherPath = Path.Combine(targetDir, "AI-PostGen.exe");
                 if (!File.Exists(launcherPath))
                 {
-                    string portableInSource = Path.Combine(sourceDir, "AI-PostGen-Portable.exe");
-                    if (File.Exists(portableInSource))
+                    string portableInTarget = Path.Combine(targetDir, "AI-PostGen-Portable.exe");
+                    if (File.Exists(portableInTarget))
                     {
-                        File.Copy(portableInSource, launcherPath, true);
+                        File.Copy(portableInTarget, launcherPath, true);
+                    }
+                    else
+                    {
+                        string portableInSource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AI-PostGen-Portable.exe");
+                        if (File.Exists(portableInSource))
+                        {
+                            File.Copy(portableInSource, launcherPath, true);
+                        }
                     }
                 }
 

@@ -35,22 +35,8 @@ if ($LASTEXITCODE -eq 0) {
     Write-Error "Falha ao compilar Launcher Portatil."
 }
 
-# 2. Compilar Instalador (AI-PostGen-Setup.exe)
-Write-Host "[2/3] Compilando Instalador Windows (AI-PostGen-Setup.exe)..." -ForegroundColor Yellow
-$InstallerSrc = Join-Path $ScriptDir "src-desktop\Installer.cs"
-$SetupOut = Join-Path $ReleaseDir "AI-PostGen-Setup.exe"
-$RootSetup = Join-Path $ScriptDir "AI-PostGen-Setup.exe"
-
-& $CscPath /target:winexe /optimize+ /platform:anycpu "/out:$SetupOut" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:Microsoft.CSharp.dll "$InstallerSrc"
-if ($LASTEXITCODE -eq 0) {
-    Copy-Item $SetupOut $RootSetup -Force
-    Write-Host "  OK: AI-PostGen-Setup.exe gerado com sucesso!" -ForegroundColor Green
-} else {
-    Write-Error "Falha ao compilar Instalador."
-}
-
-# 3. Gerar Pacote Compactado ZIP com Banco e Recursos
-Write-Host "[3/3] Gerando pacote ZIP para distribuicao com banco e vault..." -ForegroundColor Yellow
+# 2. Gerar Pacote Compactado ZIP com Banco e Recursos
+Write-Host "[2/3] Gerando pacote ZIP para distribuicao com banco e vault..." -ForegroundColor Yellow
 $ZipPath = Join-Path $ReleaseDir "AI-PostGen-Portable-v1.0.0-windows-x64.zip"
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 
@@ -59,7 +45,6 @@ if (Test-Path $StagingDir) { Remove-Item $StagingDir -Recurse -Force }
 New-Item -ItemType Directory -Path $StagingDir | Out-Null
 
 Copy-Item $PortableOut (Join-Path $StagingDir "AI-PostGen-Portable.exe") -Force
-Copy-Item $SetupOut (Join-Path $StagingDir "AI-PostGen-Setup.exe") -Force
 Copy-Item (Join-Path $ScriptDir "package.json") $StagingDir -Force
 Copy-Item (Join-Path $ScriptDir "global_config.json") $StagingDir -Force
 Copy-Item (Join-Path $ScriptDir ".env.example") $StagingDir -Force
@@ -79,12 +64,26 @@ if (Test-Path (Join-Path $ScriptDir ".next")) {
 
 Compress-Archive -Path (Join-Path $StagingDir "*") -DestinationPath $ZipPath -Force
 Remove-Item $StagingDir -Recurse -Force
-Write-Host "  OK: Pacote compactado com banco de dados gerado em: $ZipPath" -ForegroundColor Green
+Write-Host "  OK: Pacote compactado gerado em: $ZipPath" -ForegroundColor Green
+
+# 3. Compilar Instalador Auto-Extraivel com Payload Embutido (AI-PostGen-Setup.exe)
+Write-Host "[3/3] Compilando Instalador Auto-Extraivel (AI-PostGen-Setup.exe)..." -ForegroundColor Yellow
+$InstallerSrc = Join-Path $ScriptDir "src-desktop\Installer.cs"
+$SetupOut = Join-Path $ReleaseDir "AI-PostGen-Setup.exe"
+$RootSetup = Join-Path $ScriptDir "AI-PostGen-Setup.exe"
+
+& $CscPath /target:winexe /optimize+ /platform:anycpu "/out:$SetupOut" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.FileSystem.dll "/resource:$ZipPath,payload.zip" "$InstallerSrc"
+if ($LASTEXITCODE -eq 0) {
+    Copy-Item $SetupOut $RootSetup -Force
+    Write-Host "  OK: AI-PostGen-Setup.exe (Auto-Extraivel) gerado com sucesso!" -ForegroundColor Green
+} else {
+    Write-Error "Falha ao compilar Instalador."
+}
 
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host " BUILD CONCLUIDO COM SUCESSO!" -ForegroundColor Green
 Write-Host " Arquivos prontos em: release/" -ForegroundColor White
 Write-Host " - AI-PostGen-Portable.exe" -ForegroundColor White
-Write-Host " - AI-PostGen-Setup.exe" -ForegroundColor White
+Write-Host " - AI-PostGen-Setup.exe (Auto-Contido com todos os arquivos)" -ForegroundColor White
 Write-Host " - AI-PostGen-Portable-v1.0.0-windows-x64.zip" -ForegroundColor White
 Write-Host "=========================================" -ForegroundColor Cyan
