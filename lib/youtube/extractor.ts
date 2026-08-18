@@ -208,6 +208,79 @@ async function fetchCaptionsViaWatchPage(videoId: string): Promise<{
   return null;
 }
 
+/** Analisa qualquer formato de dados de legenda retornado pelo YouTube (JSON3, XML padrão, SRV3 ou WebVTT). */
+export function parseCaptionData(rawText: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  if (!rawText || typeof rawText !== "string") return segments;
+
+  // 1. Tenta formato JSON3
+  try {
+    const json = JSON.parse(rawText);
+    if (json.events && Array.isArray(json.events)) {
+      for (const evt of json.events) {
+        if (!evt.segs || !Array.isArray(evt.segs)) continue;
+        const text = decodeTranscriptText(
+          evt.segs.map((s: any) => s.utf8 || "").join("")
+        );
+        if (!text) continue;
+        const start = (evt.tStartMs || 0) / 1000;
+        const duration = (evt.dDurationMs || 0) / 1000;
+        segments.push({ text, start, duration });
+      }
+      if (segments.length > 0) return segments;
+    }
+  } catch {}
+
+  // 2. Tenta XML padrão (<text start="1.23" dur="2.5">Texto</text>)
+  const textTagRegex = /<text\s+[^>]*start="([\d.]+)"(?:\s+dur="([\d.]+)")?[^>]*>([\s\S]*?)<\/text>/gi;
+  let match;
+  while ((match = textTagRegex.exec(rawText)) !== null) {
+    const start = parseFloat(match[1]);
+    const duration = match[2] ? parseFloat(match[2]) : 2.0;
+    const text = decodeTranscriptText(match[3]);
+    if (text) {
+      segments.push({ text, start, duration });
+    }
+  }
+  if (segments.length > 0) return segments;
+
+  // 3. Tenta formato SRV3 / TimedText XML (<p t="1234" d="2000"><s>Texto</s></p>)
+  const pTagRegex = /<p\s+[^>]*t="(\d+)"(?:\s+d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/gi;
+  while ((match = pTagRegex.exec(rawText)) !== null) {
+    const start = parseInt(match[1], 10) / 1000;
+    const duration = match[2] ? parseInt(match[2], 10) / 1000 : 2.0;
+    const cleanText = decodeTranscriptText(match[3].replace(/<[^>]+>/g, ""));
+    if (cleanText) {
+      segments.push({ text: cleanText, start, duration });
+    }
+  }
+  if (segments.length > 0) return segments;
+
+  // 4. Tenta formato WebVTT (00:00:01.000 --> 00:00:04.000 \n Texto)
+  const vttRegex = /(?:(\d{1,2}:)?(\d{2}):(\d{2})[.,](\d{3}))\s*-->\s*(?:(\d{1,2}:)?(\d{2}):(\d{2})[.,](\d{3}))[\r\n]+([\s\S]*?)(?=(?:\r?\n\r?\n|\r?\n\d|\r?\n[0-9]{2}:|$))/g;
+  while ((match = vttRegex.exec(rawText)) !== null) {
+    const hrs = match[1] ? parseInt(match[1], 10) : 0;
+    const mins = parseInt(match[2], 10);
+    const secs = parseInt(match[3], 10);
+    const ms = parseInt(match[4], 10);
+    const start = hrs * 3600 + mins * 60 + secs + ms / 1000;
+
+    const endHrs = match[5] ? parseInt(match[5], 10) : 0;
+    const endMins = parseInt(match[6], 10);
+    const endSecs = parseInt(match[7], 10);
+    const endMs = parseInt(match[8], 10);
+    const end = endHrs * 3600 + endMins * 60 + endSecs + endMs / 1000;
+    const duration = Math.max(1, end - start);
+
+    const text = decodeTranscriptText(match[9].replace(/<[^>]+>/g, ""));
+    if (text) {
+      segments.push({ text, start, duration });
+    }
+  }
+
+  return segments;
+}
+
 /** Obtém e processa a lista de legendas cronometradas do YouTube. */
 export async function fetchYouTubeTranscript(videoId: string): Promise<{
   segments: TranscriptSegment[];
@@ -259,47 +332,23 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<{
     throw new Error("Faixa de legendas sem URL válida.");
   }
 
-  // Tenta baixar no formato json3
-  const timedTextUrl = transcriptBaseUrl.includes("fmt=json3")
-    ? transcriptBaseUrl
-    : `${transcriptBaseUrl}&fmt=json3`;
-
   let segments: TranscriptSegment[] = [];
 
-  try {
-    const timedRes = await fetch(timedTextUrl);
-    if (timedRes.ok) {
-      const json3 = await timedRes.json();
-      if (json3.events && Array.isArray(json3.events)) {
-        for (const evt of json3.events) {
-          if (!evt.segs || !Array.isArray(evt.segs)) continue;
-          const text = decodeTranscriptText(
-            evt.segs.map((s: any) => s.utf8 || "").join("")
-          );
-          if (!text) continue;
+  const urlsToTry = [
+    transcriptBaseUrl.includes("fmt=json3") ? transcriptBaseUrl : `${transcriptBaseUrl}&fmt=json3`,
+    transcriptBaseUrl.includes("fmt=srv3") ? transcriptBaseUrl : `${transcriptBaseUrl}&fmt=srv3`,
+    transcriptBaseUrl,
+  ];
 
-          const start = (evt.tStartMs || 0) / 1000;
-          const duration = (evt.dDurationMs || 0) / 1000;
-          segments.push({ text, start, duration });
-        }
+  for (const targetUrl of urlsToTry) {
+    try {
+      const timedRes = await fetch(targetUrl);
+      if (timedRes.ok) {
+        const textData = await timedRes.text();
+        segments = parseCaptionData(textData);
+        if (segments.length > 0) break;
       }
-    }
-  } catch {
-    // Fallback para XML
-    const xmlRes = await fetch(transcriptBaseUrl);
-    const xmlText = await xmlRes.text();
-
-    const textTagRegex = /<text\s+start="([\d.]+)"(?:\s+dur="([\d.]+)")?[^>]*>([\s\S]*?)<\/text>/gi;
-    let match;
-    while ((match = textTagRegex.exec(xmlText)) !== null) {
-      const start = parseFloat(match[1]);
-      const duration = match[2] ? parseFloat(match[2]) : 2.0;
-      const text = decodeTranscriptText(match[3]);
-
-      if (text) {
-        segments.push({ text, start, duration });
-      }
-    }
+    } catch {}
   }
 
   if (segments.length === 0) {

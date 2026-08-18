@@ -18,13 +18,15 @@ namespace AIPostGenLauncher
         private static bool isExiting = false;
 
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // Verifica porta livre
-            serverPort = GetFreePort(3000);
+            int preferredPort = ReadConfiguredPort(args);
+
+            // Verifica porta livre a partir da porta preferida
+            serverPort = GetFreePort(preferredPort);
             appUrl = "http://localhost:" + serverPort;
 
             // Cria ícone na barra de tarefas (System Tray)
@@ -38,6 +40,7 @@ namespace AIPostGenLauncher
             menu.MenuItems.Add("📊 Transcritor YouTube", (s, e) => OpenBrowser(appUrl + "/transcricao"));
             menu.MenuItems.Add("🕸️ Web Scraping Pro", (s, e) => OpenBrowser(appUrl + "/scraper"));
             menu.MenuItems.Add("📄 Orçamentos (QuotePRO)", (s, e) => OpenBrowser(appUrl + "/orcamentos"));
+            menu.MenuItems.Add("⚙️ Configurações / Porta", (s, e) => OpenBrowser(appUrl + "/settings"));
             menu.MenuItems.Add("-");
             menu.MenuItems.Add("❌ Sair do AI-PostGen", (s, e) => ExitApplication());
             trayIcon.ContextMenu = menu;
@@ -55,6 +58,55 @@ namespace AIPostGenLauncher
             // Loop de eventos do Windows
             Application.ApplicationExit += (s, e) => Cleanup();
             Application.Run();
+        }
+
+        private static int ReadConfiguredPort(string[] args)
+        {
+            // 1. Argumentos de linha de comando
+            if (args != null && args.Length > 0)
+            {
+                for (int i = 0; i < args.Length; i++)
+                {
+                    if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Length)
+                    {
+                        int p;
+                        if (int.TryParse(args[i + 1], out p) && p > 1000 && p < 65535) return p;
+                    }
+                    int directPort;
+                    if (int.TryParse(args[i], out directPort) && directPort > 1000 && directPort < 65535) return directPort;
+                }
+            }
+
+            // 2. global_config.json
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "global_config.json");
+                if (File.Exists(configPath))
+                {
+                    string text = File.ReadAllText(configPath);
+                    System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(text, "\"port\"\\s*:\\s*(\\d+)");
+                    if (match.Success)
+                    {
+                        int p = int.Parse(match.Groups[1].Value);
+                        if (p > 1000 && p < 65535) return p;
+                    }
+                }
+            }
+            catch { }
+
+            // 3. Variável de ambiente PORT
+            try
+            {
+                string envPort = Environment.GetEnvironmentVariable("PORT");
+                if (!string.IsNullOrEmpty(envPort))
+                {
+                    int p;
+                    if (int.TryParse(envPort, out p) && p > 1000 && p < 65535) return p;
+                }
+            }
+            catch { }
+
+            return 3000;
         }
 
         private static int GetFreePort(int startingPort)
@@ -82,16 +134,25 @@ namespace AIPostGenLauncher
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
+                if (!File.Exists(Path.Combine(baseDir, "package.json")))
+                {
+                    MessageBox.Show(
+                        "O arquivo package.json não foi encontrado na pasta atual:\n" + baseDir + "\n\nCertifique-se de executar o AI-PostGen dentro da pasta do projeto!",
+                        "AI-PostGen - Aviso",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+
                 ProcessStartInfo psi = new ProcessStartInfo();
                 psi.FileName = "cmd.exe";
-                psi.Arguments = "/c pnpm start -p " + serverPort + " || npx next start -p " + serverPort;
+                psi.Arguments = "/c pnpm start -p " + serverPort + " || pnpm dev -p " + serverPort + " || npx next start -p " + serverPort + " || npx next dev -p " + serverPort;
                 psi.WorkingDirectory = baseDir;
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
                 psi.CreateNoWindow = true;
                 psi.UseShellExecute = false;
 
                 psi.EnvironmentVariables["PORT"] = serverPort.ToString();
-                psi.EnvironmentVariables["NODE_ENV"] = "production";
 
                 serverProcess = new Process();
                 serverProcess.StartInfo = psi;
@@ -136,6 +197,10 @@ namespace AIPostGenLauncher
             {
                 OpenBrowser(appUrl);
                 trayIcon.ShowBalloonTip(3000, "AI-PostGen", "AI-PostGen está rodando em " + appUrl, ToolTipIcon.Info);
+            }
+            else if (!online && !isExiting)
+            {
+                trayIcon.ShowBalloonTip(5000, "AI-PostGen", "O servidor local ainda está inicializando ou encontrou um erro. Clique no ícone da bandeja para abrir quando estiver pronto.", ToolTipIcon.Warning);
             }
         }
 

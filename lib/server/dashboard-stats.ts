@@ -118,7 +118,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   if (isDatabaseConfigured()) return getDatabaseDashboardStats()
 
   const clientsDirectory = path.join(getVaultPath(), '02-Clientes')
-  const entries = await fs.readdir(clientsDirectory, { withFileTypes: true })
+  let entries: Array<{ name: string; isDirectory: () => boolean }> = []
+  try {
+    entries = (await fs.readdir(clientsDirectory, { withFileTypes: true })) as any
+  } catch {
+    entries = []
+  }
   const clients = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   const [clientMetrics, studioEvents] = await Promise.all([
     Promise.all(
@@ -126,7 +131,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         collectClientMetrics(path.join(clientsDirectory, client), client),
       ),
     ),
-    readStudioGenerationEvents(),
+    readStudioGenerationEvents().catch(() => []),
   ])
   const posts = clientMetrics.flatMap((metrics) => metrics.posts)
   const archivedPosts = clientMetrics.reduce(

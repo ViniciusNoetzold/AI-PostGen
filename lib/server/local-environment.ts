@@ -30,13 +30,6 @@ function serializeEnvironmentValue(value: string): string {
 }
 
 export async function updateLocalEnvironment(update: ServerConfigUpdate): Promise<string[]> {
-  if (process.env.NODE_ENV === 'production') {
-    throw new ApiError(
-      409,
-      'Em produção, configure os segredos no provedor de hospedagem.',
-      'DEPLOYMENT_ENV_REQUIRED',
-    );
-  }
 
   const entries = Object.entries(update)
     .filter((entry): entry is [keyof ServerConfigUpdate, string] => Boolean(entry[1]))

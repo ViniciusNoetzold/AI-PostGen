@@ -1,5 +1,6 @@
 export interface PublicConfigProfile {
   vaultPath: string
+  port: number
   instagramAccountId: string
   defaultLanguage: string
   instagramConfigured: boolean

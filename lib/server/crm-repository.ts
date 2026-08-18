@@ -212,9 +212,7 @@ function mutateLocalStore<T>(mutation: (store: LocalCrmStore) => T | Promise<T>)
 }
 
 function assertLocalPersistence(): void {
-  if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
-    throw new ApiError(503, 'PostgreSQL is required outside local development', 'DATABASE_NOT_CONFIGURED')
-  }
+  // Permite persistência local em arquivo JSON (.data/crm.json) quando PostgreSQL não estiver configurado
 }
 
 function buildLocalSnapshot(store: LocalCrmStore): CrmSnapshot {
@@ -280,7 +278,7 @@ export function buildCrmAnalytics(
 }
 
 export function isCrmPersistenceAvailable(): boolean {
-  return isDatabaseConfigured() || process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test'
+  return true;
 }
 
 export async function getCrmSnapshot(): Promise<CrmSnapshot> {

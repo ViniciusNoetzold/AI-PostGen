@@ -17,6 +17,8 @@ namespace AIPostGenInstaller
         private CheckBox desktopShortcutCheck;
         private CheckBox startMenuShortcutCheck;
         private CheckBox launchAfterCheck;
+        private Label portLabel;
+        private TextBox portBox;
         private ProgressBar progressBar;
         private Button installBtn;
         private Button cancelBtn;
@@ -25,7 +27,7 @@ namespace AIPostGenInstaller
         public InstallerForm()
         {
             this.Text = "Instalação do AI-PostGen";
-            this.Size = new Size(520, 380);
+            this.Size = new Size(520, 430);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -44,7 +46,7 @@ namespace AIPostGenInstaller
 
             descLabel = new Label()
             {
-                Text = "Este assistente instalará o AI-PostGen com todas as ferramentas integradas:\n• AI Post Gen & Product Studio\n• QuotePRO Orçamentos\n• Web Scraping Pro & Transcritor do YouTube",
+                Text = "Este assistente instalará o AI-PostGen com todas as ferramentas integradas:\n• AI Post Gen & Product Studio\n• QuotePRO Orçamentos\n• Web Scraping Pro, CRM & Transcritor do YouTube",
                 Location = new Point(25, 55),
                 Size = new Size(460, 65),
                 ForeColor = Color.FromArgb(71, 85, 105)
@@ -86,11 +88,36 @@ namespace AIPostGenInstaller
                 }
             };
 
+            // Port selector
+            portLabel = new Label()
+            {
+                Text = "Porta HTTP Local:",
+                Location = new Point(25, 185),
+                AutoSize = true,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+            };
+
+            portBox = new TextBox()
+            {
+                Text = "3000",
+                Location = new Point(145, 182),
+                Size = new Size(70, 25)
+            };
+
+            Label portHint = new Label()
+            {
+                Text = "(Ex: 3000, 3001, 8080 - pode ser alterada depois)",
+                Location = new Point(225, 185),
+                AutoSize = true,
+                ForeColor = Color.FromArgb(100, 116, 139),
+                Font = new Font("Segoe UI", 8.5F)
+            };
+
             // Options
             desktopShortcutCheck = new CheckBox()
             {
                 Text = "Criar atalho na Área de Trabalho (Desktop)",
-                Location = new Point(25, 185),
+                Location = new Point(25, 215),
                 AutoSize = true,
                 Checked = true
             };
@@ -98,7 +125,7 @@ namespace AIPostGenInstaller
             startMenuShortcutCheck = new CheckBox()
             {
                 Text = "Criar atalho no Menu Iniciar",
-                Location = new Point(25, 210),
+                Location = new Point(25, 240),
                 AutoSize = true,
                 Checked = true
             };
@@ -106,14 +133,14 @@ namespace AIPostGenInstaller
             launchAfterCheck = new CheckBox()
             {
                 Text = "Iniciar AI-PostGen ao concluir a instalação",
-                Location = new Point(25, 235),
+                Location = new Point(25, 265),
                 AutoSize = true,
                 Checked = true
             };
 
             progressBar = new ProgressBar()
             {
-                Location = new Point(25, 265),
+                Location = new Point(25, 300),
                 Size = new Size(455, 15),
                 Visible = false
             };
@@ -121,7 +148,7 @@ namespace AIPostGenInstaller
             statusLabel = new Label()
             {
                 Text = "",
-                Location = new Point(25, 283),
+                Location = new Point(25, 318),
                 Size = new Size(455, 18),
                 ForeColor = Color.FromArgb(37, 99, 235),
                 Font = new Font("Segoe UI", 8.5F, FontStyle.Italic)
@@ -131,7 +158,7 @@ namespace AIPostGenInstaller
             installBtn = new Button()
             {
                 Text = "Instalar Agora",
-                Location = new Point(280, 305),
+                Location = new Point(280, 345),
                 Size = new Size(115, 32),
                 BackColor = Color.FromArgb(225, 29, 72),
                 ForeColor = Color.White,
@@ -144,7 +171,7 @@ namespace AIPostGenInstaller
             cancelBtn = new Button()
             {
                 Text = "Cancelar",
-                Location = new Point(400, 305),
+                Location = new Point(400, 345),
                 Size = new Size(80, 32),
                 BackColor = Color.White
             };
@@ -155,6 +182,9 @@ namespace AIPostGenInstaller
             this.Controls.Add(pathLabel);
             this.Controls.Add(pathBox);
             this.Controls.Add(browseBtn);
+            this.Controls.Add(portLabel);
+            this.Controls.Add(portBox);
+            this.Controls.Add(portHint);
             this.Controls.Add(desktopShortcutCheck);
             this.Controls.Add(startMenuShortcutCheck);
             this.Controls.Add(launchAfterCheck);
@@ -172,6 +202,7 @@ namespace AIPostGenInstaller
             installBtn.Enabled = false;
             browseBtn.Enabled = false;
             pathBox.Enabled = false;
+            portBox.Enabled = false;
             progressBar.Visible = true;
             progressBar.Style = ProgressBarStyle.Marquee;
             statusLabel.Text = "Copiando arquivos e configurando o sistema...";
@@ -198,6 +229,42 @@ namespace AIPostGenInstaller
                     }
                 }
 
+                // Configura porta e caminhos no global_config.json de destino
+                int chosenPort = 3000;
+                int.TryParse(portBox.Text.Trim(), out chosenPort);
+                if (chosenPort < 1000 || chosenPort > 65535) chosenPort = 3000;
+
+                string configPath = Path.Combine(targetDir, "global_config.json");
+                string vaultDir = Path.Combine(targetDir, "Obsidian vault neural brain");
+                if (!Directory.Exists(vaultDir)) Directory.CreateDirectory(vaultDir);
+
+                string configJson = "{\n  \"vaultPath\": \"" + vaultDir.Replace("\\", "\\\\") + "\",\n  \"port\": " + chosenPort + ",\n  \"defaultLanguage\": \"pt-BR\"\n}";
+
+                if (File.Exists(configPath))
+                {
+                    try
+                    {
+                        string current = File.ReadAllText(configPath);
+                        if (System.Text.RegularExpressions.Regex.IsMatch(current, "\"port\"\\s*:"))
+                        {
+                            current = System.Text.RegularExpressions.Regex.Replace(current, "\"port\"\\s*:\\s*\\d+", "\"port\": " + chosenPort);
+                        }
+                        else
+                        {
+                            current = current.TrimEnd('}', ' ', '\r', '\n') + ",\n  \"port\": " + chosenPort + "\n}";
+                        }
+                        File.WriteAllText(configPath, current);
+                    }
+                    catch
+                    {
+                        File.WriteAllText(configPath, configJson);
+                    }
+                }
+                else
+                {
+                    File.WriteAllText(configPath, configJson);
+                }
+
                 // Cria atalhos
                 if (desktopShortcutCheck.Checked)
                 {
@@ -216,7 +283,7 @@ namespace AIPostGenInstaller
                 progressBar.Style = ProgressBarStyle.Blocks;
                 progressBar.Value = 100;
 
-                MessageBox.Show("O AI-PostGen foi instalado com sucesso!", "Instalação Concluída", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("O AI-PostGen foi instalado com sucesso!\n\nPorta configurada: " + chosenPort + "\nURL: http://localhost:" + chosenPort, "Instalação Concluída", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 if (launchAfterCheck.Checked && File.Exists(launcherPath))
                 {

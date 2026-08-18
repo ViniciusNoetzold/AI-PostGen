@@ -23,8 +23,8 @@ export async function requireRole(request: Request, required: AppRole): Promise<
 
   const hostname = new URL(request.url).hostname;
   const isLoopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
-  if (process.env.NODE_ENV === "development" && isLoopback) {
-    return { userId: "local-development-admin", role: "admin" };
+  if (isLoopback) {
+    return { userId: "local-admin", role: "admin" };
   }
 
   throw new ApiError(503, "Authentication is not configured", "AUTH_NOT_CONFIGURED");

@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       configToSave.instagramAccountId = configUpdate.instagramAccountId;
     }
     if (configUpdate.defaultLanguage) configToSave.defaultLanguage = configUpdate.defaultLanguage;
+    if (configUpdate.port) configToSave.port = configUpdate.port;
 
     await saveGlobalConfig(configToSave);
     return NextResponse.json({

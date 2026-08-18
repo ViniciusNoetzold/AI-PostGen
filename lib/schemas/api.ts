@@ -31,6 +31,7 @@ const language = z.enum([
 
 export const configUpdateSchema = z.object({
   vaultPath: z.string().trim().min(3).max(1024).optional(),
+  port: z.number().int().min(1024).max(65535).optional(),
   instagramToken: z.string().trim().max(4096).optional(),
   instagramAccountId: z.string().trim().max(128).optional(),
   defaultLanguage: language.optional(),

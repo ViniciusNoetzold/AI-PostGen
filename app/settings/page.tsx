@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Database,
+  ExternalLink,
   FolderSync,
   HardDrive,
   KeyRound,
@@ -38,6 +39,7 @@ const LANGUAGES = [
 
 interface ConfigFormState {
   vaultPath: string
+  port: string
   instagramAccountId: string
   instagramToken: string
   defaultLanguage: string
@@ -61,6 +63,7 @@ interface ServerConfigFormState {
 
 const EMPTY_FORM: ConfigFormState = {
   vaultPath: '',
+  port: '3000',
   instagramAccountId: '',
   instagramToken: '',
   defaultLanguage: 'pt-BR',
@@ -157,6 +160,7 @@ export default function SettingsPage() {
         setConfig(payload)
         setForm({
           vaultPath: payload.vaultPath,
+          port: String(payload.port || 3000),
           instagramAccountId: payload.instagramAccountId,
           instagramToken: '',
           defaultLanguage: payload.defaultLanguage,
@@ -192,6 +196,7 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vaultPath: form.vaultPath,
+          port: form.port ? parseInt(form.port, 10) : 3000,
           instagramAccountId: form.instagramAccountId,
           instagramToken: form.instagramToken || undefined,
           defaultLanguage: form.defaultLanguage,
@@ -301,18 +306,36 @@ export default function SettingsPage() {
                 />
               </label>
 
-              <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                  <Languages className="size-4 text-cyan-500" /> Idioma padrão dos posts
-                </span>
-                <select
-                  value={form.defaultLanguage}
-                  onChange={(event) => updateField('defaultLanguage', event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                >
-                  {LANGUAGES.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}
-                </select>
-              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <ServerCog className="size-4 text-cyan-500" /> Porta HTTP Local
+                  </span>
+                  <input
+                    type="number"
+                    min="1024"
+                    max="65535"
+                    value={form.port}
+                    onChange={(event) => updateField('port', event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 font-mono text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    placeholder="3000"
+                  />
+                  <span className="mt-1 block text-[11px] text-slate-500">Porta onde o app responde (ex: 3000, 3001, 8080).</span>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <Languages className="size-4 text-cyan-500" /> Idioma padrão dos posts
+                  </span>
+                  <select
+                    value={form.defaultLanguage}
+                    onChange={(event) => updateField('defaultLanguage', event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  >
+                    {LANGUAGES.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}
+                  </select>
+                </label>
+              </div>
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Instagram manual — compatibilidade</h3>
@@ -356,7 +379,13 @@ export default function SettingsPage() {
             </div>
 
             <fieldset disabled={!config?.serverConfigWritable || serverSaving} className="space-y-3 p-4 disabled:opacity-70">
-              <IntegrationSection label="Gemini" description="Texto e recursos generativos" configured={Boolean(config?.geminiConfigured)} icon={Sparkles}>
+              <IntegrationSection label="Gemini" description="Texto e recursos generativos (Google)" configured={Boolean(config?.geminiConfigured)} icon={Sparkles}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Chave de API do Google Gemini</span>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-pink-400 hover:underline">
+                    <ExternalLink className="size-3" /> Obter chave gratuita no Google AI Studio
+                  </a>
+                </div>
                 <SecretField label="GEMINI_API_KEY" value={serverForm.geminiApiKey} onChange={(value) => updateServerField('geminiApiKey', value)} />
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                   Modelo de texto opcional
@@ -365,14 +394,26 @@ export default function SettingsPage() {
               </IntegrationSection>
 
               <IntegrationSection label="Telegram" description="Bot e canal de notificações" configured={Boolean(config?.telegramConfigured)} icon={Send}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Notificações automáticas</span>
+                  <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:underline">
+                    <ExternalLink className="size-3" /> Criar bot no @BotFather
+                  </a>
+                </div>
                 <SecretField label="TELEGRAM_BOT_TOKEN" value={serverForm.telegramBotToken} onChange={(value) => updateServerField('telegramBotToken', value)} />
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                   TELEGRAM_CHAT_ID
-                  <input value={serverForm.telegramChatId} onChange={(event) => updateServerField('telegramChatId', event.target.value)} placeholder="Ex.: -1001234567890" className={INPUT_CLASS} />
+                  <input value={serverForm.telegramChatId} onChange={(event) => updateServerField('telegramChatId', event.target.value)} placeholder="Ex.: -1001234567890 (use @userinfobot para descobrir)" className={INPUT_CLASS} />
                 </label>
               </IntegrationSection>
 
               <IntegrationSection label="Instagram / Meta" description="OAuth, publicação e analytics" configured={Boolean(config?.instagramConfigured || config?.metaOAuthConfigured)} icon={Camera}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Instagram Graph API</span>
+                  <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-pink-400 hover:underline">
+                    <ExternalLink className="size-3" /> Meta for Developers
+                  </a>
+                </div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                   META_APP_ID
                   <input value={serverForm.metaAppId} onChange={(event) => updateServerField('metaAppId', event.target.value)} className={INPUT_CLASS} />
@@ -388,25 +429,49 @@ export default function SettingsPage() {
                 </a>
               </IntegrationSection>
 
-              <IntegrationSection label="Hugging Face" description="Modelos auxiliares" configured={Boolean(config?.huggingFaceConfigured)} icon={KeyRound}>
+              <IntegrationSection label="Hugging Face" description="Modelos auxiliares e transcrição" configured={Boolean(config?.huggingFaceConfigured)} icon={KeyRound}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Token de acesso gratuito</span>
+                  <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-yellow-400 hover:underline">
+                    <ExternalLink className="size-3" /> Gerar Token na Hugging Face (Read)
+                  </a>
+                </div>
                 <SecretField label="HUGGING_FACE_TOKEN" value={serverForm.huggingFaceToken} onChange={(value) => updateServerField('huggingFaceToken', value)} />
               </IntegrationSection>
 
               <IntegrationSection label="Autenticação" description="Clerk, login e perfis" configured={Boolean(config?.authenticationConfigured)} icon={LockKeyhole}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Login para equipes</span>
+                  <a href="https://dashboard.clerk.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-violet-400 hover:underline">
+                    <ExternalLink className="size-3" /> Painel do Clerk
+                  </a>
+                </div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
                   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
                   <input value={serverForm.clerkPublishableKey} onChange={(event) => updateServerField('clerkPublishableKey', event.target.value)} placeholder="pk_..." className={INPUT_CLASS} />
                 </label>
                 <SecretField label="CLERK_SECRET_KEY" value={serverForm.clerkSecretKey} onChange={(value) => updateServerField('clerkSecretKey', value)} />
-                <p className="text-[11px] leading-5 text-amber-400/90">Requer reiniciar a aplicação para ativar o login.</p>
+                <p className="text-[11px] leading-5 text-amber-400/90">Opcional no Desktop local. Requer reiniciar a aplicação para ativar o login.</p>
               </IntegrationSection>
 
               <IntegrationSection label="PostgreSQL" description="Prisma, clientes, posts e auditoria" configured={Boolean(config?.databaseConfigured)} icon={Database}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Banco de Dados em Nuvem</span>
+                  <a href="https://neon.tech/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline">
+                    <ExternalLink className="size-3" /> Criar PostgreSQL grátis no Neon
+                  </a>
+                </div>
                 <SecretField label="DATABASE_URL" value={serverForm.databaseUrl} onChange={(value) => updateServerField('databaseUrl', value)} placeholder="postgresql://usuario:senha@host/banco" />
-                <p className="text-[11px] leading-5 text-slate-500">Depois de conectar um banco vazio, execute <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">pnpm db:deploy</code>.</p>
+                <p className="text-[11px] leading-5 text-slate-500">Depois de conectar um banco novo, execute <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">pnpm db:deploy</code>.</p>
               </IntegrationSection>
 
               <IntegrationSection label="Object storage" description="Imagens e vídeos no Vercel Blob" configured={Boolean(config?.objectStorageConfigured)} icon={HardDrive}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500">Armazenamento de mídias</span>
+                  <a href="https://vercel.com/dashboard/stores" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-cyan-400 hover:underline">
+                    <ExternalLink className="size-3" /> Vercel Blob Storage
+                  </a>
+                </div>
                 <SecretField label="BLOB_READ_WRITE_TOKEN" value={serverForm.blobReadWriteToken} onChange={(value) => updateServerField('blobReadWriteToken', value)} />
               </IntegrationSection>
             </fieldset>

@@ -1,6 +1,17 @@
 packages:
   - .
 
+allowBuilds:
+  '@google/genai': true
+  '@prisma/engines': true
+  '@swc/core': true
+  cbor-extract: true
+  core-js: true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - "@google/genai"
   - "@prisma/engines"

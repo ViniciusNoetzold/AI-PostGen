@@ -1,141 +1,130 @@
-# Omni Workspace
+# 🚀 AI-PostGen (Omni Workspace)
 
-![Omni Workspace](./public/brand/omni-workspace-logo.png)
+![AI-PostGen Banner](./public/brand/omni-workspace-logo.png)
 
-Plataforma full-stack para criação, organização, aprovação, agendamento e publicação de conteúdo. O Omni Workspace combina inteligência artificial, CRM, calendário de conteúdo, integrações com Meta e Telegram e uma base de conhecimento compatível com Obsidian.
+Plataforma Desktop e Web completa para geração automatizada de conteúdo com IA, CRM visual com grafo de relacionamentos 2D/3D, agendamento de publicações, orçamentos profissionais (QuotePRO), transcrição inteligente do YouTube e Product Studio com inteligência artificial.
 
-## Tecnologias
+---
 
-- Next.js 16.3 e React 19
-- TypeScript e Tailwind CSS
-- Prisma 7 e PostgreSQL
-- Clerk para autenticação e RBAC
-- Gemini e Hugging Face
-- Meta Graph API e Telegram
-- Vercel Blob para imagens e vídeos
-- Upstash Redis para limites distribuídos
-- Workflow DevKit para filas, aprovação e publicação agendada
-- Vitest e Playwright
+## 🌟 Principais Funcionalidades
 
-## Funcionalidades
+### 🤖 1. IA Post Gen & Product Studio
+- **Geração Multilíngue**: Criação de posts estruturados em 12 idiomas, com controle de tom, modo aprofundado e formato carrossel.
+- **Product Studio**: Geração e edição assistida de vídeos e mídias de produto com IA generativa.
+- **Integrações de IA**: Suporte nativo ao **Google Gemini 2.0** e **Hugging Face**.
 
-- Geração de posts em vários idiomas, com modo aprofundado e carrossel.
-- Vault de posts com busca, filtros, edição, arquivamento, preview e publicação.
-- Product Studio para criação e edição de vídeos de produto.
-- Dashboard com volumetria real do Vault ou PostgreSQL.
-- CRM de pessoas e empresas com fotos, cargos, categorias e relacionamentos.
-- Visualização da rede de clientes com zoom, pan e conexões interativas.
-- Calendário de conteúdo com agendamento, aprovação e workflow durável.
-- Relatórios, configurações centralizadas e status das integrações.
-- APIs protegidas por autenticação, papéis, validação Zod, limites de payload e proteções contra SSRF e path traversal.
+### 👥 2. CRM Visual & Grafo de Relacionamentos
+- **Diretório de Contatos & Empresas**: Organização completa por categorias (*Fundadores, Time, Clientes, Parceiros, Leads*).
+- **Grafo 2D/3D Interativo**: Visualização gráfica com física de força, nós interativos, filtros por cidade, tags e intensidade de conexões.
+- **Banco Híbrido**: Persistência local embutida (`.data/crm.json`) ou em nuvem com **PostgreSQL / Prisma ORM**.
 
-## PostgreSQL e Obsidian Vault
+### 🎬 3. Transcritor Inteligente do YouTube
+- Extração de áudio e legendas em múltiplos formatos (**XML, SRV3 e WebVTT**).
+- Resumos executivos e extração de insights gerados por IA a partir de vídeos e playlists.
 
-O projeto opera atualmente em modo híbrido:
+### 💼 4. Orçamentos Profissionais (QuotePRO) & Web Scraping Pro
+- **QuotePRO**: Criação, cálculo e exportação de propostas comerciais e orçamentos em PDF.
+- **Web Scraping Pro**: Varredura inteligente de sites, extração de textos e referências de mercado.
 
-- O **Obsidian Vault** mantém contexto editorial, arquivos Markdown, histórico compatível e informações usadas pelo grafo neural.
-- O **PostgreSQL** armazena dados relacionais e duráveis: usuários, clientes, empresas, posts, mídia, aprovações, filas, métricas e auditoria.
-- O **Object Storage** recebe arquivos de imagem e vídeo em produção.
+### 📅 5. Calendário Editorial & Publicação
+- Agendamento de posts, aprovação em workflow durável e publicação via Meta / Instagram Graph API.
+- Notificações automáticas via bot do Telegram.
 
-O PostgreSQL complementa o Vault nesta fase; ele ainda não o substitui completamente.
+---
 
-## Instalação local
+## 📦 Downloads & Instalação para Usuários Finais (Windows)
+
+Você pode baixar os executáveis prontos na seção de [Releases do GitHub](https://github.com/ViniciusNoetzold/AI-PostGen/releases):
+
+| Arquivo | Descrição |
+| :--- | :--- |
+| **`AI-PostGen-Setup.exe`** | **Instalador Oficial Windows**: Permite escolher a pasta de destino, definir a **Porta HTTP Local** personalizada e cria atalhos na Área de Trabalho e Menu Iniciar. |
+| **`AI-PostGen-Portable-v1.0.0-windows-x64.zip`** | **Pacote Portátil Tudo-em-Um**: Descompacte e execute diretamente `AI-PostGen-Portable.exe` sem necessidade de instalação prévia. |
+
+---
+
+## 🔌 Escolha de Porta Personalizada
+
+O AI-PostGen permite que você escolha a porta em que a aplicação vai rodar:
+
+1. **No Instalador**: Durante a instalação, defina a porta desejada no campo *"Porta HTTP Local"* (Padrão: `3000`).
+2. **Nas Configurações Web**: Acesse [http://localhost:3000/settings](http://localhost:3000/settings) e altere a porta no campo *"Porta HTTP Local"*.
+3. **Por Linha de Comando**:
+   ```bash
+   AI-PostGen-Portable.exe --port 3005
+   ```
+*(Se a porta escolhida estiver ocupada por outro programa, o aplicativo seleciona automaticamente a próxima porta livre).*
+
+---
+
+## 🔑 Como Obter as Chaves de API (100% Opcional)
+
+O AI-PostGen já vem pronto para uso com banco local e Obsidian Vault. Para habilitar recursos adicionais de IA e redes sociais, obtenha suas chaves:
+
+| Serviço | Para que serve | Onde obter |
+| :--- | :--- | :--- |
+| **Google Gemini** | Geração de texto, temas e vídeos | [Google AI Studio (Gratuito)](https://aistudio.google.com/app/apikey) |
+| **Hugging Face** | Modelos auxiliares e transcrições | [Hugging Face Tokens](https://huggingface.co/settings/tokens) |
+| **Telegram Bot** | Alertas e notificações de posts | [@BotFather no Telegram](https://t.me/BotFather) |
+| **PostgreSQL** | Banco de dados durável em nuvem | [Neon.tech](https://neon.tech/) ou [Supabase](https://supabase.com/) |
+| **Meta / Instagram** | Publicação direta no Instagram | [Meta for Developers](https://developers.facebook.com/apps/) |
+
+As chaves podem ser salvas com segurança na interface gráfica em **Configurações > Integrações do Servidor** ou no arquivo `.env.local`.
+
+---
+
+## 💻 Instalação para Desenvolvedores
 
 ### Pré-requisitos
+- **Node.js** (v20 ou superior)
+- **pnpm** (`npm install -g pnpm`)
 
-- Node.js 20 ou superior
-- pnpm
-- PostgreSQL opcional para os recursos duráveis
-- Obsidian opcional para abrir visualmente o Vault
-
-### Passos
+### Passo a Passo
 
 ```bash
+# 1. Clonar o repositório
 git clone https://github.com/ViniciusNoetzold/AI-PostGen.git
 cd AI-PostGen
+
+# 2. Instalar dependências
 pnpm install
-```
 
-Copie o modelo de ambiente e preencha somente no arquivo local:
-
-```bash
-cp .env.example .env.local
-```
-
-No PowerShell:
-
-```powershell
-Copy-Item .env.example .env.local
-```
-
-As integrações também podem ser configuradas em **Configurações → Integrações do servidor** durante o desenvolvimento local. Segredos preenchidos nessa tela não são devolvidos pela API.
-
-Se utilizar PostgreSQL, aplique as migrações:
-
-```bash
+# 3. Gerar o cliente do banco de dados
 pnpm db:generate
-pnpm db:deploy
-```
 
-Inicie a aplicação:
-
-```bash
+# 4. Iniciar em modo de desenvolvimento
 pnpm dev
 ```
 
-Acesse [http://localhost:3000](http://localhost:3000).
+Acesse **[http://localhost:3000](http://localhost:3000)** no seu navegador.
 
-## Variáveis de ambiente
+### Gerando os Executáveis Desktop (Windows)
 
-O arquivo [.env.example](./.env.example) lista as variáveis suportadas para:
-
-- Clerk
-- PostgreSQL
-- Vercel Blob
-- Upstash Redis
-- Gemini
-- Hugging Face
-- Telegram
-- Meta OAuth
-- criptografia e logs
-
-Nunca versione `.env.local`, tokens, chaves privadas, arquivos de mídia locais ou dados reais do Vault. Em produção, configure os segredos diretamente no provedor de hospedagem.
-
-## Scripts
+Para compilar o Instalador (`AI-PostGen-Setup.exe`) e o Launcher Portátil (`AI-PostGen-Portable.exe`):
 
 ```bash
-pnpm dev          # desenvolvimento
-pnpm build        # build de produção
-pnpm lint         # ESLint
-pnpm typecheck    # TypeScript
-pnpm test         # testes unitários e de segurança
-pnpm test:e2e     # testes de interface com Playwright
-pnpm db:generate  # gera o Prisma Client
-pnpm db:migrate   # cria migrações no desenvolvimento
-pnpm db:deploy    # aplica migrações existentes
+pnpm build:desktop
 ```
 
-## Estrutura principal
+Os arquivos finais serão gerados na pasta `release/`.
 
-```text
-app/          Páginas e APIs do App Router
-components/   Componentes compartilhados
-lib/          Regras de negócio, segurança e integrações
-prisma/       Schema e migrações PostgreSQL
-workflows/    Filas e workflows duráveis
-tests/        Testes unitários e de segurança
-e2e/          Testes Playwright
+---
+
+## 🛠️ Scripts Disponíveis
+
+```bash
+pnpm dev             # Inicia o servidor Next.js em modo desenvolvimento
+pnpm build           # Compila a aplicação para produção
+pnpm start           # Inicia o servidor em modo produção
+pnpm build:desktop   # Compila os executáveis Windows (Launcher + Setup + ZIP)
+pnpm test            # Executa testes unitários (Vitest)
+pnpm test:e2e        # Executa testes de interface (Playwright)
+pnpm typecheck       # Validação estática com TypeScript
+pnpm db:seed         # Popula o banco PostgreSQL a partir do .data/crm.json
 ```
 
-## O que ainda falta ser feito
+---
 
-- Provisionar o PostgreSQL de produção, configurar `DATABASE_URL` e executar `pnpm db:deploy`.
-- Importar ou reconciliar os posts existentes no Vault com o PostgreSQL e definir se o Vault permanecerá como espelho/exportação opcional no longo prazo.
-- Provisionar o Clerk, configurar as chaves, validar cadastro/login e definir os papéis `viewer`, `editor`, `approver` e `admin` para os usuários reais.
-- Provisionar Vercel Blob e configurar `BLOB_READ_WRITE_TOKEN` para persistência de imagens e vídeos em produção.
-- Provisionar Upstash Redis para rate limiting distribuído em produção.
-- Criar e revisar o aplicativo Meta, concluir o OAuth com uma conta real, validar renovação de tokens, publicação e analytics.
-- Validar Telegram, Gemini, Hugging Face e os provedores de imagem/vídeo com credenciais e limites de produção.
-- Integrar opcionalmente o Google Calendar como espelho da Agenda de Conteúdo e o Google Tasks para tarefas humanas de revisão.
-- Configurar observabilidade de produção, alertas, retenção de auditoria e monitoramento dos workflows.
-- Executar a suíte E2E completa em um ambiente com PostgreSQL, autenticação, storage e contas externas configuradas.
+## 📄 Licença
+
+Distribuído sob licença proprietária/MIT. Desenvolvido por **Vinícius Noetzold & Mezzold Studio**.

@@ -111,11 +111,11 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
   if (isClerkConfigured()) return authenticatedProxy(request, event);
 
   const isLoopback = ["localhost", "127.0.0.1", "::1"].includes(request.nextUrl.hostname);
-  if (process.env.NODE_ENV === "development" && isLoopback) {
-    const limited = await enforceRateLimit(request, "local-development-admin");
+  if (isLoopback) {
+    const limited = await enforceRateLimit(request, "local-admin");
     if (limited) return limited;
     return NextResponse.next({
-      request: { headers: withIdentityHeaders(request, "local-development-admin", "admin") },
+      request: { headers: withIdentityHeaders(request, "local-admin", "admin") },
     });
   }
 
